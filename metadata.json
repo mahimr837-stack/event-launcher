@@ -1,0 +1,6 @@
+{
+  "name": "EventLauncher",
+  "description": "A thoughtfully coordinated university event workspace with interactive planning, agents, tasks, and activity tracking.",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
