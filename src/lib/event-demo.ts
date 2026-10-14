@@ -136,18 +136,25 @@ export function demoReducer(previous: DemoState, action: DemoAction): DemoState 
       state.invitation = "Prepared";
       state.tasks.forEach(t => { if (t.status === "Proposed") t.status = "Pending"; });
       say(state, "user", "I approve the plan.");
-      say(state, "assistant", `Plan approved. I’ve activated the sample club-team assignments and prepared a speaker invitation draft. Nothing has been sent.\n\n${state.event.venueConfirmed && state.event.permission ? "Venue clearance is confirmed, so the specialists can prepare their work." : "Venue & Permissions flagged a dependency: Communications will hold publication, and Operations needs a confirmed room."}`);
+      say(state, "assistant", `Plan approved. I’ve activated the club-team assignments and prepared a speaker invitation draft. Nothing has been sent.\n\n${state.event.venueConfirmed && state.event.permission ? "Venue clearance is confirmed, so the specialists can prepare their work." : "Venue & Permissions flagged a dependency: Communications will hold publication, and Operations needs a confirmed room."}`);
       if (state.stage === "poster") say(state, "assistant", "Who will be responsible for designing the event poster? I need their name, email, and deadline to prepare an assignment and track follow-up. The demo won’t contact them.");
+      else say(state, "assistant", "The poster owner is already recorded. Your demo connections are remembered too — review the reminder preferences below when you’re ready.");
       log(state, "You approved the plan. Coordinator activated four simulated specialist assignments.", "decision");
       log(state, state.event.venueConfirmed && state.event.permission ? "Venue clearance confirmed; specialists can prepare their work." : "Venue → Communications & Operations: venue clearance unresolved. Publication and room-dependent work blocked.", "agent");
-      log(state, "Communications & Design requested a poster owner. Speaker invitation prepared, not sent.", "agent");
+      log(state, state.stage === "poster" ? "Communications & Design requested a poster owner. Speaker invitation prepared, not sent." : "Communications retained the existing poster owner. Revised speaker invitation prepared, not sent.", "agent");
       break;
-    case "EDIT_EVENT":
+    case "EDIT_EVENT": {
+      const dateChanged = state.event.date !== action.event.date;
+      const roomChanged = state.event.venue !== action.event.venue;
       state.event = { ...action.event }; state.plan = "Proposed"; state.stage = "plan";
       state.venueRequest = "Not started"; state.announcement = "Not started"; state.invitation = "Not started";
-      state.tasks.forEach(t => { t.deadline = offsetDate(state.event.date, t.id === "poster" ? -7 : t.id === "av" ? -1 : 0); if (t.status !== "Completed") t.status = "Proposed"; });
-      say(state, "assistant", "I’ve updated the event details and revised the plan. Please review and approve it again before the specialists continue. Previous request and announcement drafts have been cleared.");
+      state.tasks.forEach(t => {
+        if (dateChanged) t.deadline = [offsetDate(state.event.date, t.id === "poster" ? -7 : t.id === "av" ? -1 : 0), state.now.slice(0, 10)].sort().at(-1)!;
+        if (t.status !== "Completed" || dateChanged || (roomChanged && t.venueDependent)) t.status = "Proposed";
+      });
+      say(state, "assistant", `I’ve updated the event details and revised the plan. Please review and approve it again before the specialists continue. Previous request and announcement drafts have been cleared.${dateChanged || roomChanged ? " Changed event dates or rooms require affected physical tasks to be confirmed again; previous notes are kept as history." : " Existing owners, deadlines, and reported completion are retained."}`);
       log(state, "Event details revised. Previous plan approval withdrawn; revised plan proposed.", "decision"); break;
+    }
     case "RISK":
       say(state, "user", RISK_COMMAND); state.riskShown = true;
       say(state, "assistant", state.event.venueConfirmed && state.event.permission
