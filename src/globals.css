@@ -1,101 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
+    --background: 43 30% 96%;
+    --foreground: 105 5% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
+    --card-foreground: 105 5% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --popover-foreground: 105 5% 16%;
+    --primary: 107 13% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 90 15% 92%;
+    --secondary-foreground: 107 15% 30%;
+    --muted: 40 19% 93%;
+    --muted-foreground: 85 3% 43%;
+    --accent: 94 18% 91%;
+    --accent-foreground: 107 15% 30%;
+    --destructive: 15 38% 43%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 42 21% 87%;
+    --input: 42 21% 87%;
+    --ring: 107 13% 48%;
+    --radius: 0.65rem;
+    --sage: 109 10% 55%;
+    --sage-dark: 107 15% 33%;
+    --sage-light: 95 23% 93%;
+    --clay: 17 35% 41%;
+    --clay-light: 25 45% 94%;
   }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; font-family: 'DM Sans', sans-serif; font-feature-settings: 'ss01' on; }
+  button, input, textarea, select { font: inherit; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 3px; }
+  ::selection { background: hsl(var(--accent)); }
 }
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-  }
+@layer utilities {
+  .text-sage-dark { color: hsl(var(--sage-dark)); }
+  .text-clay { color: hsl(var(--clay)); }
+  .bg-sage-light { background-color: hsl(var(--sage-light)); }
+  .bg-clay-light { background-color: hsl(var(--clay-light)); }
+  .bg-sage { background-color: hsl(var(--sage)); }
+  .surface-shadow { box-shadow: 0 3px 16px -8px rgba(54, 53, 43, .12); }
+  .soft-scroll { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+  .message-enter { animation: message-in .3s ease-out both; }
 }
+@keyframes message-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
