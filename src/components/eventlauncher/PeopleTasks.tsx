@@ -10,16 +10,163 @@ export function PeopleTasks({ state, dispatch, onWorkspace }: { state: DemoState
   const [editing, setEditing] = useState<Task | null>(null);
   const tasks = state.tasks.filter(task => filter === "All tasks" || (filter === "Completed" ? task.status === "Completed" : ["Blocked", "Overdue"].includes(taskStatus(task, state))));
   const completed = state.tasks.filter(t => t.status === "Completed").length;
+  const needsAttention = state.tasks.filter(t => ["Blocked", "Overdue"].includes(taskStatus(t, state))).length;
   const poster = state.tasks.find(t => t.id === "poster");
   const canAdvance = !!poster && poster.status !== "Completed" && poster.deadline >= state.now.slice(0, 10);
-  return <div className="mx-auto max-w-5xl p-6 lg:p-9"><SectionHeading eyebrow="Real people. Clear responsibilities." title="People & tasks" description="Offline work needs an owner, a deadline, and an explicit status update."><span className="rounded-lg border bg-white px-3 py-2 text-[11px] text-muted-foreground">{completed} of {state.tasks.length} completed</span></SectionHeading>
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="flex gap-1 rounded-lg border bg-white p-1">{["All tasks", "Needs attention", "Completed"].map(label => <button key={label} onClick={() => setFilter(label)} className={cn("rounded-md px-3 py-1.5 text-[11px] transition-colors", filter === label ? "bg-sage-light font-medium text-sage-dark" : "text-muted-foreground hover:bg-muted")}>{label}</button>)}</div><p className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Clock3 className="h-3 w-3"/>Demo clock · {formatDate(state.now, true)}</p></div>
-    <div className="overflow-hidden rounded-xl border bg-white"><div className="hidden grid-cols-[minmax(190px,1.5fr)_minmax(140px,1fr)_100px_115px_65px] gap-4 border-b bg-background/50 px-5 py-3 text-[9px] font-medium uppercase tracking-wider text-muted-foreground lg:grid"><span>Responsibility</span><span>Owner</span><span>Due date</span><span>Status</span><span className="text-right">Update</span></div><div className="divide-y">{tasks.map(task => { const status = taskStatus(task, state); return <div key={task.id} className="grid items-center gap-4 px-5 py-5 lg:grid-cols-[minmax(190px,1.5fr)_minmax(140px,1fr)_100px_115px_65px]"><div><p className="text-xs font-medium">{task.title}</p>{status === "Blocked" && <p className="mt-1.5 text-[10px] leading-relaxed text-clay">{task.venueDependent && (!state.event.venueConfirmed || !state.event.permission) ? "Waiting for venue clearance" : task.note || "Owner reported a blocker"}</p>}{task.note && status !== "Blocked" && <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">{task.note}</p>}</div><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-sage-dark">{task.owner.split(" ").map(n => n[0]).slice(0, 2).join("")}</span><div className="min-w-0"><p className="text-[11px] font-medium">{task.owner}</p><p className="mt-0.5 break-all text-[9px] text-muted-foreground">{task.email}</p></div></div><p className="text-[11px] text-muted-foreground">{formatDate(task.deadline, true)}<span className="ml-2 text-[9px] lg:ml-0 lg:block">{task.id === "poster" ? "4:00 PM" : task.id === "av" ? "Before event day" : "Before doors open"}</span></p><div><StatusBadge status={status}/></div><button onClick={() => setEditing(task)} disabled={state.plan !== "Approved"} title={state.plan !== "Approved" ? "Approve the plan to activate assignments" : "Update task"} className="flex items-center gap-1.5 text-[11px] font-medium text-sage-dark hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"><Pencil className="h-3 w-3"/>Update</button></div>; })}{!tasks.length && <div className="p-10 text-center"><ClipboardList className="mx-auto h-7 w-7 text-sage-dark"/><p className="mt-3 text-sm font-medium">{filter === "Completed" ? "No completed tasks yet." : "No tasks need attention."}</p><p className="mt-1.5 text-xs text-muted-foreground">{filter === "Completed" ? "Completion appears only after an explicit update." : "Check the other filters for your full task list."}</p></div>}</div></div>
+
+  return (
+    <div className="mx-auto max-w-5xl p-6 lg:p-9">
+      <SectionHeading eyebrow="Real people. Clear responsibilities." title="People & tasks" description="Offline work needs an owner, a deadline, and an explicit status update.">
+        <span className="rounded-lg border bg-white px-3 py-2 text-[11px] text-muted-foreground">
+          {completed} of {state.tasks.length} completed
+        </span>
+      </SectionHeading>
+
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-lg border bg-white p-1">
+          {[
+            { label: "All tasks", count: state.tasks.length },
+            { label: "Needs attention", count: needsAttention },
+            { label: "Completed", count: completed },
+          ].map(({ label, count }) => {
+            const isActive = filter === label;
+            return (
+              <button
+                key={label}
+                onClick={() => setFilter(label)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors",
+                  isActive
+                    ? label === "Needs attention"
+                      ? "bg-[#F7ECE9] text-clay ring-1 ring-clay/25"
+                      : label === "Completed"
+                      ? "bg-sage-light text-sage-dark ring-1 ring-primary/20"
+                      : "bg-sage-light text-sage-dark"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <span>{label}</span>
+                <span
+                  className={cn(
+                    "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold",
+                    isActive
+                      ? label === "Needs attention"
+                        ? "bg-clay text-white"
+                        : "bg-sage-dark text-white"
+                      : label === "Needs attention" && count > 0
+                      ? "bg-clay-light text-clay"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <Clock3 className="h-3 w-3" />Demo clock · {formatDate(state.now, true)}
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border bg-white">
+        <div className="hidden grid-cols-[minmax(190px,1.5fr)_minmax(140px,1fr)_100px_115px_65px] gap-4 border-b bg-background/50 px-5 py-3 text-[9px] font-medium uppercase tracking-wider text-muted-foreground lg:grid">
+          <span>Responsibility</span>
+          <span>Owner</span>
+          <span>Due date</span>
+          <span>Status</span>
+          <span className="text-right">Update</span>
+        </div>
+        <div className="divide-y">
+          {tasks.map(task => {
+            const status = taskStatus(task, state);
+            const isAttention = status === "Blocked" || status === "Overdue";
+            const isCompleted = status === "Completed";
+
+            return (
+              <div
+                key={task.id}
+                className={cn(
+                  "grid items-center gap-4 px-5 py-4 transition-colors lg:grid-cols-[minmax(190px,1.5fr)_minmax(140px,1fr)_100px_115px_65px]",
+                  isAttention
+                    ? "bg-[#FCFAF9]/70 hover:bg-[#F9F5F3]"
+                    : isCompleted
+                    ? "bg-[#FAFBF9]/60 hover:bg-[#F4F6F2]"
+                    : "hover:bg-muted/20"
+                )}
+              >
+                <div>
+                  <p className="text-xs font-medium text-foreground">{task.title}</p>
+                  {status === "Blocked" && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-clay font-medium">
+                      {task.venueDependent && (!state.event.venueConfirmed || !state.event.permission)
+                        ? "Waiting for venue clearance"
+                        : task.note || "Owner reported a blocker"}
+                    </p>
+                  )}
+                  {status === "Overdue" && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-clay font-medium">
+                      {task.note || "Task is past due date; awaiting completion report."}
+                    </p>
+                  )}
+                  {status === "Completed" && task.note && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                      {task.note}
+                    </p>
+                  )}
+                  {status !== "Blocked" && status !== "Overdue" && status !== "Completed" && task.note && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                      {task.note}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-sage-dark">
+                    {task.owner.split(" ").map(n => n[0]).slice(0, 2).join("")}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium">{task.owner}</p>
+                    <p className="mt-0.5 break-all text-[9px] text-muted-foreground">{task.email}</p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {formatDate(task.deadline, true)}
+                  <span className="ml-2 text-[9px] lg:ml-0 lg:block">
+                    {task.id === "poster" ? "4:00 PM" : task.id === "av" ? "Before event day" : "Before doors open"}
+                  </span>
+                </p>
+                <div>
+                  <StatusBadge status={status} />
+                </div>
+                <button
+                  onClick={() => setEditing(task)}
+                  title="Update task"
+                  className="flex items-center gap-1.5 text-[11px] font-medium text-sage-dark hover:underline"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Update
+                </button>
+              </div>
+            );
+          })}
+          {!tasks.length && (
+            <div className="p-10 text-center">
+              <ClipboardList className="mx-auto h-7 w-7 text-sage-dark" />
+              <p className="mt-3 text-sm font-medium">
+                {filter === "Completed" ? "No completed tasks yet." : "No tasks need attention."}
+              </p>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {filter === "Completed" ? "Completion appears only after an explicit update." : "Check the other filters for your full task list."}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     {!poster && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed bg-white/50 p-5"><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-sage-dark"/><div><p className="text-xs font-medium">The poster needs an owner.</p><p className="mt-1 text-[11px] text-muted-foreground">The coordinator collects their details after plan approval.</p></div></div><ActionButton variant="outline" onClick={onWorkspace}>Continue in Workspace<ArrowUpRight/></ActionButton></div>}
     {poster && <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-clay-light p-4"><div className="flex items-start gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 text-clay"/><div><p className="text-xs font-medium text-clay">Try a missed deadline</p><p className="mt-1 text-[11px] text-muted-foreground">Advance the demo clock beyond the poster deadline to see the coordinator’s response.</p></div></div><ActionButton variant="outline" disabled={!canAdvance} onClick={() => dispatch({ type: "ADVANCE_CLOCK" })}>{poster.status === "Completed" ? "Poster already completed" : canAdvance ? "Simulate overdue poster" : "Demo clock advanced"}</ActionButton></div>}
-    <div className="mt-5 flex items-start gap-2 text-[10px] leading-relaxed text-muted-foreground"><UsersRound className="h-3.5 w-3.5 shrink-0"/>The initial club team is declared sample data. Assignments and entered addresses remain in memory; no one is contacted. Notification previews update when you change a task.</div>
-    <Dialog open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}><DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl bg-background"><DialogHeader><DialogTitle>Update responsibility</DialogTitle><DialogDescription className="text-xs leading-relaxed">{editing?.title}. Physical completion must be explicitly reported; it is never inferred.</DialogDescription></DialogHeader>{editing && <TaskForm key={editing.id} task={editing} state={state} onSave={task => { dispatch({ type: "UPDATE_TASK", task }); setEditing(null); }}/>}</DialogContent></Dialog>
-  </div>;
+      <Dialog open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}><DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl bg-background"><DialogHeader><DialogTitle>Update responsibility</DialogTitle><DialogDescription className="text-xs leading-relaxed">{editing?.title}. Physical completion must be explicitly reported; it is never inferred.</DialogDescription></DialogHeader>{editing && <TaskForm key={editing.id} task={editing} state={state} onSave={task => { dispatch({ type: "UPDATE_TASK", task }); setEditing(null); }}/>}</DialogContent></Dialog>
+    </div>
+  );
 }
 function TaskForm({ task, state, onSave }: { task: Task; state: DemoState; onSave: (task: Task) => void }) {
   const [draft, setDraft] = useState(task);
