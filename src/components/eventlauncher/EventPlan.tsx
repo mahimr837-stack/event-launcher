@@ -82,37 +82,56 @@ export function PlanMilestones({ state }: { state: DemoState }) {
   const items = milestones(state);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/80 bg-white">
-      <div className="divide-y divide-border/60">
+    <div className="rounded-xl border border-border/80 bg-white p-5 sm:p-6 shadow-xs">
+      <div className="space-y-6">
         {items.map((item, index) => {
           const isDone = item.status === "Completed" || item.status === "Simulated as completed";
           const isBlocked = item.status === "Blocked";
+          const isInProgress = item.status === "In progress";
+          const isLast = index === items.length - 1;
 
           return (
-            <div key={item.title} className="flex items-start gap-4 p-4 transition-colors hover:bg-muted/30 sm:px-6 sm:py-4">
-              <span
-                className={cn(
-                  "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
-                  isDone
-                    ? "bg-sage text-white"
-                    : isBlocked
-                    ? "bg-clay-light text-clay"
-                    : "border border-border bg-background text-muted-foreground"
-                )}
-              >
-                {isDone ? <Check className="h-3.5 w-3.5" /> : index + 1}
-              </span>
+            <div key={item.title} className="relative flex items-start gap-4">
+              {/* Continuous vertical timeline connector line */}
+              {!isLast && (
+                <div
+                  className="absolute left-[7px] top-3.5 -bottom-6 w-[1.5px] bg-border"
+                  aria-hidden="true"
+                />
+              )}
 
+              {/* Timeline Dot (Node) matching the reference screenshot */}
+              <div className="relative z-10 mt-1 flex h-4 w-4 shrink-0 items-center justify-center">
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full transition-all",
+                    isDone
+                      ? "bg-primary ring-2 ring-primary/20"
+                      : isBlocked
+                      ? "bg-clay ring-2 ring-clay/20"
+                      : isInProgress
+                      ? "bg-primary ring-2 ring-primary/30"
+                      : "bg-[#D0CCC5]"
+                  )}
+                />
+              </div>
+
+              {/* Milestone Details */}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className={cn("text-xs font-medium sm:text-sm", isDone ? "text-foreground font-semibold" : "text-foreground")}>
+                  <h3
+                    className={cn(
+                      "text-xs font-medium sm:text-sm leading-snug",
+                      isDone ? "text-foreground font-semibold" : "text-foreground"
+                    )}
+                  >
                     {item.title}
                   </h3>
                   <StatusPill status={item.status} />
                 </div>
 
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                  <span>{item.owner}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground/80">{item.owner}</span>
                   <span className="text-border">·</span>
                   <span>Due {formatDate(item.deadline, true)}</span>
                   {item.dependency && (
@@ -144,18 +163,35 @@ export function PlanCard({ state, dispatch, onEdit, onReview }: Props) {
         <StatusPill status={state.plan} />
       </div>
 
-      <div className="space-y-3 py-4">
-        {items.map((item, idx) => (
-          <div key={item.title} className="flex items-start gap-3">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
-              {idx + 1}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-foreground">{item.title}</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{item.owner} · by {formatDate(item.deadline, true)}</p>
+      <div className="space-y-4 py-3">
+        {items.map((item, idx) => {
+          const isDone = item.status === "Completed" || item.status === "Simulated as completed";
+          const isBlocked = item.status === "Blocked";
+          const isLast = idx === items.length - 1;
+
+          return (
+            <div key={item.title} className="relative flex items-start gap-3">
+              {!isLast && (
+                <div
+                  className="absolute left-[5px] top-3 -bottom-4 w-[1.5px] bg-border"
+                  aria-hidden="true"
+                />
+              )}
+              <div className="relative z-10 mt-1 flex h-3 w-3 shrink-0 items-center justify-center">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    isDone ? "bg-primary" : isBlocked ? "bg-clay" : "bg-[#D0CCC5]"
+                  )}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground">{item.title}</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{item.owner} · by {formatDate(item.deadline, true)}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3.5">
