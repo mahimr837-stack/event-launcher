@@ -11,6 +11,10 @@ export function Workspace({ state, dispatch, navigate, onEdit, onReview }: Props
   const bottom = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const lastRiskId = state.messages.filter(m => m.kind === "risk").at(-1)?.id;
+  useEffect(() => {
+    if (state.stage === "email") dispatch({ type: "SKIP_EMAIL" });
+    if (state.stage === "channels") dispatch({ type: "FINISH_CHANNELS" });
+  }, [state.stage, dispatch]);
   useEffect(() => { if (state.messages.length > 2) scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "smooth" }); }, [state.messages.length, state.stage]);
   function submit(text = input) {
     const value = text.trim();
@@ -32,15 +36,13 @@ export function Workspace({ state, dispatch, navigate, onEdit, onReview }: Props
     else if (state.stage === "permission") {
       if (!/^(yes|no|not yet|approved|permission confirmed)/i.test(value)) { setError("Answer yes or not yet, or use the suggested answers above."); return; }
       dispatch({ type: "ANSWER", value });
-    } else if (state.stage === "email" && /connect.*email/i.test(value)) dispatch({ type: "CONNECT", channel: "Email" });
-    else if (state.stage === "email" && /skip|draft|local/i.test(value)) dispatch({ type: "SKIP_EMAIL" });
-    else if (state.stage === "ready" && /draft|prepare.*announcement/i.test(value)) dispatch({ type: "PREPARE_ANNOUNCEMENT" });
+    } else if (state.stage === "ready" && /draft|prepare.*announcement/i.test(value)) dispatch({ type: "PREPARE_ANNOUNCEMENT" });
     else dispatch({ type: "GUIDANCE" });
     setInput("");
   }
   return <div className="flex h-full min-h-0 flex-col">
     <div ref={scroll} className="soft-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-[720px] space-y-7">
-      <div role="log" aria-label="Event coordination conversation" aria-live="polite" aria-relevant="additions" className="space-y-7">{state.messages.map((message, index) => message.role === "user" ? <div key={message.id} className="message-enter flex justify-end gap-3"><div className="max-w-[85%]"><p className="mb-2 text-right text-[10px] font-medium text-muted-foreground">You <span className="ml-2 font-normal">{index === 0 ? "10:00 AM" : "Demo"}</span></p><div className="rounded-2xl rounded-tr-md border border-primary/20 bg-sage-light px-4 py-3 text-[13px] leading-relaxed text-sage-dark">{message.text}</div></div><div className="mt-5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E8DED2] text-[9px] font-semibold text-[#655B50]" aria-label="You">JD</div></div> : <div key={message.id} className="message-enter flex gap-3"><Mark small className="mt-0.5 h-7 w-7 rounded-lg"/><div className="min-w-0 flex-1"><div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold text-sage-dark">Event coordinator</span></div><p className="whitespace-pre-line text-[13px] leading-[1.8]">{message.text}</p>{message.kind === "risk" && message.id === lastRiskId && <div className="mt-4"><RiskCard state={state} dispatch={dispatch} onPlan={() => navigate("Event Plan")}/></div>}</div></div>)}</div>
+      <div role="log" aria-label="Event coordination conversation" aria-live="polite" aria-relevant="additions" className="space-y-7">{state.messages.filter(m => !m.text.includes("email will be useful") && !m.text.includes("Connect Email for the demo") && !m.text.includes("Keep the invitation as a local draft") && !m.text.includes("Email is demo-connected") && !m.text.includes("reminder preferences below") && !m.text.includes("The poster owner is already recorded")).map((message, index) => message.role === "user" ? <div key={message.id} className="message-enter flex justify-end gap-3"><div className="max-w-[85%]"><p className="mb-2 text-right text-[10px] font-medium text-muted-foreground">You <span className="ml-2 font-normal">{index === 0 ? "10:00 AM" : "Demo"}</span></p><div className="rounded-2xl rounded-tr-md border border-primary/20 bg-sage-light px-4 py-3 text-[13px] leading-relaxed text-sage-dark">{message.text}</div></div><div className="mt-5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E8DED2] text-[9px] font-semibold text-[#655B50]" aria-label="You">JD</div></div> : <div key={message.id} className="message-enter flex gap-3"><Mark small className="mt-0.5 h-7 w-7 rounded-lg"/><div className="min-w-0 flex-1"><div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold text-sage-dark">Event coordinator</span></div><p className="whitespace-pre-line text-[13px] leading-[1.8]">{message.text}</p>{message.kind === "risk" && message.id === lastRiskId && <div className="mt-4"><RiskCard state={state} dispatch={dispatch} onPlan={() => navigate("Event Plan")}/></div>}</div></div>)}</div>
       <div className="ml-10"><ConversationActions key={state.stage} state={state} dispatch={dispatch} onEdit={onEdit} onReview={onReview} onPlan={() => navigate("Event Plan")} onActivity={() => navigate("Activity")}/></div><div ref={bottom}/>
     </div></div>
     <div className="shrink-0 bg-transparent px-4 pb-4 pt-2 sm:px-8"><div className="mx-auto max-w-[720px]">

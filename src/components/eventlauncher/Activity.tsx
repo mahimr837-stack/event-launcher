@@ -1,6 +1,16 @@
 import { useState, type Dispatch } from "react";
-import { ArrowUpRight, Check, ChevronDown, Clock3, Mail, MessageSquare, ShieldCheck, Sparkles, User, Building2, Palette, UsersRound, Wrench, CornerDownRight } from "lucide-react";
-import { type Channel, type DemoAction, type DemoState, formatDate } from "@/lib/event-demo";
+import {
+  Check,
+  Mail,
+  MessageSquare,
+  ShieldCheck,
+  User,
+  Building2,
+  Palette,
+  UsersRound,
+  Wrench,
+} from "lucide-react";
+import { type Channel, type DemoAction, type DemoState } from "@/lib/event-demo";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -9,6 +19,67 @@ interface Props {
   onWorkspace: () => void;
 }
 
+// Existing EventLauncher agents definitions for selection
+export interface EventAgent {
+  id: "guests" | "operations" | "design" | "venue";
+  name: string;
+  role: string;
+  email: string;
+  icon: typeof UsersRound;
+  description: string;
+  defaultTopic: string;
+  sampleRecipientName: string;
+  sampleRecipientEmail: string;
+}
+
+export const AVAILABLE_AGENTS: EventAgent[] = [
+  {
+    id: "guests",
+    name: "Registration & Guests Agent",
+    role: "Keynote & Guest Coordinator",
+    email: "guests.agent@eventlauncher.ai",
+    icon: UsersRound,
+    description: "Coordinates keynote speaker technical riders, arrival timing, VIP hospitality, and attendee check-in specifications.",
+    defaultTopic: "Keynote AV Specifications & Arrival Details for Dr. Maya Chen",
+    sampleRecipientName: "Elena Woods",
+    sampleRecipientEmail: "elena.woods@example.org",
+  },
+  {
+    id: "operations",
+    name: "Event-day Operations Agent",
+    role: "AV & Technical Operations Lead",
+    email: "operations.agent@eventlauncher.ai",
+    icon: Wrench,
+    description: "Manages main PA audio calibration, lapel microphones, projector routing, and room row safety staging.",
+    defaultTopic: "Sound System & PA Testing — North Hall Stage Verification",
+    sampleRecipientName: "Jordan Lee",
+    sampleRecipientEmail: "jordan.lee@example.edu",
+  },
+  {
+    id: "design",
+    name: "Communications & Design Agent",
+    role: "Creative & Print Production Lead",
+    email: "design.agent@eventlauncher.ai",
+    icon: Palette,
+    description: "Handles A2 vector print proofs, exterior easel mounts, campus print lab orders, and promotional outreach.",
+    defaultTopic: "Print Order Pre-flight Approval for Seminar Posters",
+    sampleRecipientName: "Campus Print Desk",
+    sampleRecipientEmail: "printshop@northbridge.edu",
+  },
+  {
+    id: "venue",
+    name: "Venue & Logistics Agent",
+    role: "Facilities & Permits Specialist",
+    email: "venue.agent@eventlauncher.ai",
+    icon: Building2,
+    description: "Handles Student Affairs reservation sign-offs, smart-card building access, stage layout permits, and HVAC scheduling.",
+    defaultTopic: "Room Reservation Permit & Climate Schedule for North Hall",
+    sampleRecipientName: "Facilities Coordinator",
+    sampleRecipientEmail: "facilities@northbridge.edu",
+  },
+];
+
+// Pre-existing reference threads
 interface AgentConversationThread {
   id: string;
   agentId: "operations" | "guests" | "design" | "venue" | "lead";
@@ -256,233 +327,247 @@ const AGENT_THREADS: AgentConversationThread[] = [
   },
 ];
 
-export function notificationText(state: DemoState, channel: Channel): string {
+export function notificationText(state: DemoState, _channel: Channel): string {
   if (state.plan !== "Approved") {
     return "Event plan is in draft mode. Specialist agents will initiate dispatch once the plan is approved.";
   }
   return "Agent dispatches are synchronized with active dependencies.";
 }
 
-export function ActivityView({ state }: Props) {
+export function ActivityView({ _state }: { _state?: DemoState; [key: string]: unknown }) {
+  // Reference Threads State (Existing Activity page features)
   const [selectedThreadId, setSelectedThreadId] = useState<string>("sound-check-thread");
   const [channelFilter, setChannelFilter] = useState<"All" | "Email" | "WhatsApp">("All");
 
   const filteredThreads = AGENT_THREADS.filter(
-    t => channelFilter === "All" || t.channel === channelFilter
+    (t) => channelFilter === "All" || t.channel === channelFilter
   );
-
-  const activeThread = AGENT_THREADS.find(t => t.id === selectedThreadId) || AGENT_THREADS[0];
+  const activeThread = AGENT_THREADS.find((t) => t.id === selectedThreadId) || AGENT_THREADS[0];
   const AgentIcon = activeThread.agentIcon;
 
   return (
-    <div className="mx-auto max-w-5xl p-5 sm:p-8 lg:p-10">
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-5xl p-5 sm:p-8 lg:p-10 space-y-7">
+      {/* Top Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Activity & Agent Dispatches</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              Activity & Agent Communications
+            </h1>
+          </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            View actual back-and-forth messages and emails sent by specialized AI agents.
+            Reference event communications between specialized campus agents and coordinators.
           </p>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-[#FAFAF8] p-1">
-          {(["All", "Email", "WhatsApp"] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setChannelFilter(tab)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
-                channelFilter === tab
-                  ? "bg-sage-light text-sage-dark ring-1 ring-primary/20 shadow-2xs"
-                  : "bg-white/80 text-muted-foreground border border-border/50 hover:bg-sage-light/40 hover:text-foreground"
-              )}
-            >
-              {tab === "Email" ? "Emails" : tab === "WhatsApp" ? "Direct Messages" : "All Threads"}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* Main Split Layout: Threads List on Left, Active Conversation on Right */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        {/* Left: Threads Selector (4 cols) */}
-        <div className="space-y-2 lg:col-span-5">
-          <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Agent Communication Threads ({filteredThreads.length})
+      {/* SECTION: REFERENCE THREADS */}
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Reference event communications between specialized campus agents and coordinators.
           </p>
-          <div className="space-y-2">
-            {filteredThreads.map(thread => {
-              const isSelected = thread.id === activeThread.id;
-              const Icon = thread.agentIcon;
-              const lastMessage = thread.messages[thread.messages.length - 1];
-
-              return (
-                <button
-                  key={thread.id}
-                  onClick={() => setSelectedThreadId(thread.id)}
-                  className={cn(
-                    "flex w-full flex-col items-start rounded-xl border p-3.5 text-left transition-all",
-                    isSelected
-                      ? "border-primary/50 bg-[#E5EFE0] shadow-xs ring-1.5 ring-primary/30"
-                      : "border-[#D6E2D3] bg-[#EEF4EA] hover:border-primary/40 hover:bg-[#E5EFE0]"
-                  )}
-                >
-                  <div className="flex w-full items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground">
-                      <Icon className="h-3.5 w-3.5" />
-                      {thread.agentName.replace(" Agent", "")}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
-                      {thread.channel === "Email" ? <Mail className="h-2.5 w-2.5" /> : <MessageSquare className="h-2.5 w-2.5" />}
-                      {thread.channel}
-                    </span>
-                  </div>
-
-                  <p className="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">
-                    {thread.topic}
-                  </p>
-
-                  <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                    To: {thread.recipientName}
-                  </p>
-
-                  <div className="mt-2 flex w-full items-center justify-between border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
-                    <span className="truncate">{lastMessage.senderName}: {lastMessage.body.split("\n")[0]}</span>
-                    <span className="shrink-0">{lastMessage.time}</span>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-[#FAFAF8] p-1">
+            {(["All", "Email", "WhatsApp"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setChannelFilter(tab)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                  channelFilter === tab
+                    ? "bg-sage-light text-sage-dark ring-1 ring-primary/20 shadow-2xs"
+                    : "bg-white/80 text-muted-foreground border border-border/50 hover:bg-sage-light/40 hover:text-foreground"
+                )}
+              >
+                {tab === "Email" ? "Emails" : tab === "WhatsApp" ? "Direct Messages" : "All Threads"}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Right: Detailed Back-and-Forth Conversation View (7 cols) */}
-        <div className="lg:col-span-7">
-          <div className="overflow-hidden rounded-2xl border border-border/80 bg-white shadow-xs">
-            {/* Header info */}
-            <div className="border-b border-border/60 bg-[#FBFAF7] p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sage-light text-sage-dark">
-                    <AgentIcon className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <h2 className="inline-flex items-center rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
-                      {activeThread.subject}
-                    </h2>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Topic: {activeThread.topic}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sender & Recipient Metadata */}
-              <div className="mt-3.5 grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-white p-3 text-[11px] sm:grid-cols-2">
-                <div>
-                  <span className="text-muted-foreground">Sending Agent: </span>
-                  <p className="font-semibold text-sage-dark">{activeThread.agentName}</p>
-                  <p className="text-[10px] text-muted-foreground">{activeThread.agentEmail}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Recipient: </span>
-                  <p className="font-medium text-foreground">{activeThread.recipientName}</p>
-                  <p className="text-[10px] text-muted-foreground">{activeThread.recipientEmail}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Back-and-forth Conversation Stream */}
-            <div className="space-y-4 p-4 sm:p-6 bg-[#FAFAF8]">
-              {activeThread.messages.map((message, index) => {
-                const isAgent = message.sender === "agent";
-                const isLast = index === activeThread.messages.length - 1;
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          {/* Left: Threads Selector (5 cols) */}
+          <div className="space-y-2 lg:col-span-5">
+            <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Agent Communication Threads ({filteredThreads.length})
+            </p>
+            <div className="space-y-2">
+              {filteredThreads.map((thread) => {
+                const isSelected = thread.id === activeThread.id;
+                const Icon = thread.agentIcon;
+                const lastMessage = thread.messages[thread.messages.length - 1];
 
                 return (
-                  <div key={message.id} className="relative pl-7 sm:pl-8">
-                    {/* Sidewise connection line extending to next message node */}
-                    {!isLast && (
-                      <div
-                        className="absolute left-[7px] sm:left-[9px] top-5 -bottom-4 w-[2px] bg-primary/35"
-                        aria-hidden="true"
-                      />
+                  <button
+                    key={thread.id}
+                    onClick={() => setSelectedThreadId(thread.id)}
+                    className={cn(
+                      "flex w-full flex-col items-start rounded-xl border p-3.5 text-left transition-all cursor-pointer",
+                      isSelected
+                        ? "border-primary/50 bg-[#E5EFE0] shadow-xs ring-1.5 ring-primary/30"
+                        : "border-[#D6E2D3] bg-[#EEF4EA] hover:border-primary/40 hover:bg-[#E5EFE0]"
                     )}
-
-                    {/* Node dot matching reference drawing (•) */}
-                    <div
-                      className="absolute left-0 sm:left-0.5 top-3.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 border-primary bg-white shadow-2xs"
-                      aria-hidden="true"
-                    >
-                      <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  >
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground">
+                        <Icon className="h-3.5 w-3.5" />
+                        {thread.agentName.replace(" Agent", "")}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                        {thread.channel === "Email" ? <Mail className="h-2.5 w-2.5" /> : <MessageSquare className="h-2.5 w-2.5" />}
+                        {thread.channel}
+                      </span>
                     </div>
 
-                    {/* Horizontal connection arm from node to message card */}
-                    <div
-                      className="absolute left-4 sm:left-[18px] top-[1.35rem] h-[2px] w-3 sm:w-3.5 bg-primary/35"
-                      aria-hidden="true"
-                    />
+                    <p className="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">
+                      {thread.topic}
+                    </p>
 
-                    {/* Message Box */}
-                    <div
-                      className={cn(
-                        "flex flex-col gap-1 rounded-xl p-4 transition-shadow",
-                        isAgent
-                          ? "border border-primary/25 bg-[#EEF4EA] shadow-xs"
-                          : "border border-[#E4DDD2] bg-[#F7F4ED]"
-                      )}
-                    >
-                    {/* Message Header */}
-                    <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
-                            isAgent
-                              ? "bg-sage-dark text-white font-medium"
-                              : "bg-muted text-foreground font-medium"
-                          )}
-                        >
-                          {isAgent ? "AI" : <User className="h-3 w-3" />}
-                        </span>
-                        <span className="inline-flex items-center rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
-                          {message.senderName}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {isAgent ? "(AI Agent)" : "(Contact)"}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">{message.time}</span>
+                    <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                      To: {thread.recipientName}
+                    </p>
+
+                    <div className="mt-2 flex w-full items-center justify-between border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
+                      <span className="truncate">
+                        {lastMessage.senderName}: {lastMessage.body.split("\n")[0]}
+                      </span>
+                      <span className="shrink-0">{lastMessage.time}</span>
                     </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-                    {/* Message Body */}
-                    <div className="pt-2 text-xs leading-relaxed text-foreground whitespace-pre-line">
-                      {message.body}
+          {/* Right: Detailed Conversation View (7 cols) */}
+          <div className="lg:col-span-7">
+            <div className="overflow-hidden rounded-2xl border border-border/80 bg-white shadow-xs">
+              {/* Header info */}
+              <div className="border-b border-border/60 bg-[#FBFAF7] p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sage-light text-sage-dark">
+                      <AgentIcon className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <h2 className="inline-flex items-center rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
+                        {activeThread.subject}
+                      </h2>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Topic: {activeThread.topic}</p>
                     </div>
-
-                    {/* Reply Indicator if from contact */}
-                    {!isAgent && (
-                      <div className="mt-2 flex items-center gap-1.5 pt-1 text-[10px] text-sage-dark font-medium">
-                        <Check className="h-3 w-3" />
-                        <span>Verified response received and indexed by coordinator</span>
-                      </div>
-                    )}
                   </div>
                 </div>
-              );
-            })}
-            </div>
 
-            {/* Footer Summary */}
-            <div className="border-t border-border/60 bg-white p-3.5 text-center text-[10px] text-muted-foreground">
-              Dispatched via {activeThread.channel} by {activeThread.agentName}. Updates feed directly into event dependencies.
+                {/* Sender & Recipient Metadata */}
+                <div className="mt-3.5 grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-white p-3 text-[11px] sm:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">Sending Agent: </span>
+                    <p className="font-semibold text-sage-dark">{activeThread.agentName}</p>
+                    <p className="text-[10px] text-muted-foreground">{activeThread.agentEmail}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Recipient: </span>
+                    <p className="font-medium text-foreground">{activeThread.recipientName}</p>
+                    <p className="text-[10px] text-muted-foreground">{activeThread.recipientEmail}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Back-and-forth Conversation Stream */}
+              <div className="space-y-4 p-4 sm:p-6 bg-[#FAFAF8]">
+                {activeThread.messages.map((message, index) => {
+                  const isAgent = message.sender === "agent";
+                  const isLast = index === activeThread.messages.length - 1;
+
+                  return (
+                    <div key={message.id} className="relative pl-7 sm:pl-8">
+                      {/* Connection line extending to next message node */}
+                      {!isLast && (
+                        <div
+                          className="absolute left-[7px] sm:left-[9px] top-5 -bottom-4 w-[2px] bg-primary/35"
+                          aria-hidden="true"
+                        />
+                      )}
+
+                      {/* Node dot */}
+                      <div
+                        className="absolute left-0 sm:left-0.5 top-3.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 border-primary bg-white shadow-2xs"
+                        aria-hidden="true"
+                      >
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      </div>
+
+                      {/* Horizontal connection arm from node to message card */}
+                      <div
+                        className="absolute left-4 sm:left-[18px] top-[1.35rem] h-[2px] w-3 sm:w-3.5 bg-primary/35"
+                        aria-hidden="true"
+                      />
+
+                      {/* Message Box */}
+                      <div
+                        className={cn(
+                          "flex flex-col gap-1 rounded-xl p-4 transition-shadow",
+                          isAgent
+                            ? "border border-primary/25 bg-[#EEF4EA] shadow-xs"
+                            : "border border-[#E4DDD2] bg-[#F7F4ED]"
+                        )}
+                      >
+                        {/* Message Header */}
+                        <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                                isAgent
+                                  ? "bg-sage-dark text-white font-medium"
+                                  : "bg-muted text-foreground font-medium"
+                              )}
+                            >
+                              {isAgent ? "AI" : <User className="h-3 w-3" />}
+                            </span>
+                            <span className="inline-flex items-center rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
+                              {message.senderName}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {isAgent ? "(AI Agent)" : "(Contact)"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">{message.time}</span>
+                        </div>
+
+                        {/* Message Body */}
+                        <div className="pt-2 text-xs leading-relaxed text-foreground whitespace-pre-line">
+                          {message.body}
+                        </div>
+
+                        {/* Reply Indicator if from contact */}
+                        {!isAgent && (
+                          <div className="mt-2 flex items-center gap-1.5 pt-1 text-[10px] text-sage-dark font-medium">
+                            <Check className="h-3 w-3" />
+                            <span>Verified response received and indexed by coordinator</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer Summary */}
+              <div className="border-t border-border/60 bg-white p-3.5 text-center text-[10px] text-muted-foreground">
+                Dispatched via {activeThread.channel} by {activeThread.agentName}. Updates feed directly into event dependencies.
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Summary Note */}
-      <div className="mt-7 flex items-center justify-between rounded-xl border border-primary/15 bg-white p-4">
+      <div className="flex items-center justify-between rounded-xl border border-primary/15 bg-white p-4">
         <div className="flex items-center gap-2.5">
-          <ShieldCheck className="h-4 w-4 text-sage-dark" />
+          <ShieldCheck className="h-4 w-4 text-sage-dark shrink-0" />
           <p className="text-xs text-muted-foreground">
-            All AI agent communications are recorded with full attribution, timestamps, and verifiable recipient replies.
+            All AI agent communications are recorded with full attribution, timestamps, and verifiable recipient replies via official channels.
           </p>
         </div>
       </div>

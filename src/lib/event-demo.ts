@@ -1,4 +1,4 @@
-export type View = "Workspace" | "Event Plan" | "Agents" | "People & Tasks" | "Activity";
+export type View = "Workspace" | "Ecosystem" | "Integration" | "Event Plan" | "Agents" | "People & Tasks" | "Activity";
 export type Stage = "date" | "venue" | "speaker" | "permission" | "audience" | "email" | "plan" | "poster" | "channels" | "ready";
 export type Channel = "Email" | "WhatsApp" | "Telegram";
 export type TaskStatus = "Proposed" | "Pending" | "In progress" | "Blocked" | "Completed";
@@ -200,8 +200,8 @@ export function demoReducer(previous: DemoState, action: DemoAction): DemoState 
       } else if (state.stage === "audience") {
         const count = Number(value.replace(/\s*students?$/i, ""));
         if (!Number.isInteger(count) || count < 1 || count > 2000) return previous;
-        state.event.audience = count; say(state, "user", `${count} students.`); state.stage = "email";
-        say(state, "assistant", `Got it — ${count} students. To prepare an invitation for ${state.event.speaker === "Not decided yet" ? "your future keynote speaker" : state.event.speaker}, email will be useful. Connect the demo email service, or keep the invitation as a local draft. No credentials are needed, and nothing will be sent.`);
+        state.event.audience = count; say(state, "user", `${count} students.`);
+        propose(state);
       }
       break;
     }
@@ -223,16 +223,13 @@ export function demoReducer(previous: DemoState, action: DemoAction): DemoState 
       break;
     case "APPROVE_PLAN":
       if (state.plan !== "Awaiting approval") return previous;
-      state.plan = "Approved"; state.stage = state.tasks.some(t => t.id === "poster") ? "channels" : "poster";
+      state.plan = "Approved"; state.stage = "ready";
       state.invitation = "Prepared";
       state.tasks.forEach(t => { if (t.status === "Proposed") t.status = "Pending"; });
       say(state, "user", "I approve the plan.");
       say(state, "assistant", `Plan approved. I’ve activated the club-team assignments and prepared a speaker invitation draft. Nothing has been sent.\n\n${state.event.venueConfirmed && state.event.permission ? "Venue clearance is confirmed, so the specialists can prepare their work." : "Venue & Permissions flagged a dependency: Communications will hold publication, and Operations needs a confirmed room."}`);
-      if (state.stage === "poster") say(state, "assistant", "Who will be responsible for designing the event poster? I need their name, email, and deadline to prepare an assignment and track follow-up. The demo won’t contact them.");
-      else say(state, "assistant", "The poster owner is already recorded. Your demo connections are remembered too — review the reminder preferences below when you’re ready.");
       log(state, "You approved the plan. Coordinator activated four simulated specialist assignments.", "decision");
       log(state, state.event.venueConfirmed && state.event.permission ? "Venue clearance confirmed; specialists can prepare their work." : "Venue → Communications & Operations: venue clearance unresolved. Publication and room-dependent work blocked.", "agent");
-      log(state, state.stage === "poster" ? "Communications & Design requested a poster owner. Speaker invitation prepared, not sent." : "Communications retained the existing poster owner. Revised speaker invitation prepared, not sent.", "agent");
       break;
     case "EDIT_EVENT": {
       const dateChanged = state.event.date !== action.event.date;
