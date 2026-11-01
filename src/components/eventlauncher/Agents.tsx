@@ -72,12 +72,33 @@ const SIMULATED_SCRIPT: AgentMessage[] = [
   },
 ];
 
+const MICRO_AGENTS = [
+  { name: "Venue Agent", icon: Building2 },
+  { name: "Design Agent", icon: Palette },
+  { name: "Guests Agent", icon: UsersRound },
+  { name: "Operations Agent", icon: Wrench },
+];
+
 export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
   const [messages, setMessages] = useState<AgentMessage[]>([SIMULATED_SCRIPT[0]]);
   const [turn, setTurn] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [input, setInput] = useState("");
+  const [showActiveAgents, setShowActiveAgents] = useState(false);
+  const activeAgentsRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (activeAgentsRef.current && !activeAgentsRef.current.contains(event.target as Node)) {
+        setShowActiveAgents(false);
+      }
+    }
+    if (showActiveAgents) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showActiveAgents]);
 
   // Auto-advance script
   useEffect(() => {
@@ -169,7 +190,49 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
     <div className="flex h-full min-h-0 flex-col bg-[#F4F6F2]">
       {/* Minimal Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-primary/10 px-5 py-3">
-        <span className="text-xs font-medium text-foreground">Agents Chat</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-foreground">Agents Chat</span>
+          <div ref={activeAgentsRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setShowActiveAgents(prev => !prev)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted/40 cursor-pointer shadow-2xs",
+                showActiveAgents ? "bg-sage-light text-sage-dark ring-1 ring-primary/20" : ""
+              )}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Active Agents</span>
+              <span className="rounded-full bg-sage-light px-1.5 py-0.2 text-[10px] font-semibold text-sage-dark">
+                {MICRO_AGENTS.length}
+              </span>
+            </button>
+
+            {showActiveAgents && (
+              <div className="absolute left-0 top-full mt-1.5 z-30 w-52 rounded-xl border border-border bg-white p-2.5 shadow-md">
+                <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-semibold text-foreground border-b border-border/40 pb-1.5">
+                  <span>Active Micro Agents</span>
+                  <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                    {MICRO_AGENTS.length} active
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {MICRO_AGENTS.map(agent => (
+                    <div
+                      key={agent.name}
+                      className="flex items-center gap-2 rounded-lg bg-[#F8FAF7] px-2.5 py-1.5 text-xs text-foreground border border-border/40"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <agent.icon className="h-3.5 w-3.5 text-sage-dark shrink-0" />
+                      <span className="font-medium text-foreground truncate">{agent.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsPlaying(!isPlaying)}

@@ -333,6 +333,73 @@ export async function fetchGmailThread(
   });
 }
 
+export interface SearchThreadOptions {
+  threadId?: string;
+  recipientEmail?: string;
+  subject?: string;
+  userEmail?: string;
+}
+
+export async function searchAndFetchGmailThread(
+  token: string,
+  options: SearchThreadOptions
+): Promise<{ threadId: string; messages: GmailMessageSummary[] } | null> {
+  const { threadId, recipientEmail, subject, userEmail } = options;
+
+  // 1. If threadId is already available, fetch directly
+  if (threadId) {
+    try {
+      const messages = await fetchGmailThread(token, threadId, userEmail);
+      if (messages.length > 0) {
+        return { threadId, messages };
+      }
+    } catch (e) {
+      console.warn("Direct thread fetch failed, attempting query search:", e);
+    }
+  }
+
+  // 2. Query search by recipient or subject
+  const queryTerms: string[] = [];
+  if (recipientEmail) {
+    const cleanEmail = recipientEmail.replace(/[<>]/g, "").trim();
+    if (cleanEmail.includes("@")) {
+      queryTerms.push(`(from:${cleanEmail} OR to:${cleanEmail})`);
+    }
+  }
+  if (subject) {
+    const cleanSub = subject.replace(/^(Re|Fwd):\s*/i, "").slice(0, 35).replace(/["']/g, "").trim();
+    if (cleanSub) {
+      queryTerms.push(`subject:"${cleanSub}"`);
+    }
+  }
+
+  const q = queryTerms.join(" ");
+  if (!q) return null;
+
+  try {
+    const searchRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(q)}&maxResults=5`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!searchRes.ok) return null;
+    const searchData = await searchRes.json();
+    const threads = searchData.threads || [];
+    if (threads.length === 0) return null;
+
+    const matchedThreadId = threads[0].id;
+    const messages = await fetchGmailThread(token, matchedThreadId, userEmail);
+    return { threadId: matchedThreadId, messages };
+  } catch (err) {
+    console.warn("searchAndFetchGmailThread search error:", err);
+    return null;
+  }
+}
+
 export interface ComposeAgentEmailPayload {
   agentId: string;
   agentName: string;

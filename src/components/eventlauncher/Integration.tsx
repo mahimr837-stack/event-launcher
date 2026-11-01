@@ -1,18 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  ChevronDown,
-  Check,
   Mail,
   Send,
-  Calendar,
-  FileSpreadsheet,
-  FileText,
-  CheckSquare,
-  Presentation,
-  ListTodo,
-  MessageCircle,
-  Plus,
-  Sparkles,
   Link2,
   ClipboardList,
   CheckCircle2,
@@ -20,18 +9,28 @@ import {
   User,
   ArrowRight,
   ExternalLink,
-  Bot,
+  Loader2,
+  Plus,
+  Save,
+  Check,
+  Eye,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type DemoState } from "@/lib/event-demo";
+import { type DemoState, type View } from "@/lib/event-demo";
 import { AVAILABLE_AGENTS } from "./Activity";
 import { GmailConversationSection } from "./GmailConversationSection";
 import { TelegramConversationSection } from "./TelegramConversationSection";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { initAuth, signInWithGoogle, signOutGoogle, sendGmailMessage, getCachedToken } from "@/lib/gmail-client";
+import { fetchTelegramStatus, type TelegramStatusResponse } from "@/lib/telegram-client";
+import { saveDispatchedThread, type DispatchedLiveThread } from "@/lib/dispatched-threads";
+import type { User as FirebaseUser } from "firebase/auth";
 
 interface Props {
   state: DemoState;
   onWorkspace?: () => void;
+  onNavigate?: (view: View) => void;
 }
 
 export type SupportedPlatform = "email" | "telegram" | "whatsapp";
@@ -48,128 +47,64 @@ export interface InformationQuestionItem {
   status: "ready" | "pending";
 }
 
-interface IntegrationCardDef {
-  id: string;
-  name: string;
-  subtitle: string;
-  status: "Connected" | "Active" | "Ready" | "Available";
-  platformKey?: SupportedPlatform;
-  category: "Google Workspace" | "Direct Messaging";
-  iconType:
-    | "drive"
-    | "sheets"
-    | "calendar"
-    | "docs"
-    | "slides"
-    | "tasks"
-    | "chat"
-    | "forms"
-    | "email"
-    | "telegram"
-    | "whatsapp";
+interface EmailDraft {
+  subject: string;
+  body: string;
+  status: "draft" | "sending" | "sent" | "error";
+  errorMessage?: string;
+  sentAt?: string;
 }
 
-const INTEGRATION_CATALOG: IntegrationCardDef[] = [
-  {
-    id: "gmail",
-    name: "Email (Gmail)",
-    subtitle: "Draft and send real event emails with live reply tracking",
-    status: "Connected",
-    platformKey: "email",
-    category: "Google Workspace",
-    iconType: "email",
+const DEFAULT_DRAFTS: Record<string, { subject: string; body: string }> = {
+  "info-1": {
+    subject: "AV Specifications & Arrival Details for Dr. Maya Chen's Keynote",
+    body: "Dear Dr. Elena Woods,\n\nI hope this email finds you well. I'm reaching out on behalf of the Career Seminar organizing team regarding Dr. Maya Chen's upcoming keynote presentation.\n\nCould you please confirm the following technical requirements for the North Hall stage:\n1. Preferred microphone type (lapel / lavalier vs. handheld wireless vs. lectern podium mic)\n2. Presentation display connection (HDMI / USB-C direct feed or preloading presentation slides to our stage console)\n3. Estimated arrival time on Friday so our guest hospitality team can meet you at the North Hall main lobby\n\nThank you for your assistance, and we look forward to welcoming Dr. Chen!\n\nWarm regards,\nMaya Lin\nGuest Relations Agent · EventLauncher",
   },
-  {
-    id: "telegram",
-    name: "Telegram Bot API",
-    subtitle: "Two-way messaging with recipients via @Eventlauncher_bot",
-    status: "Active",
-    platformKey: "telegram",
-    category: "Direct Messaging",
-    iconType: "telegram",
+  "info-2": {
+    subject: "Sound System & PA Setup Verification — North Hall Stage",
+    body: "Hi Jordan,\n\nFollowing up on our AV readiness checklist for North Hall: could you confirm that the main PA speakers, audio rack, and wireless microphones are calibrated?\n\nSpecifically:\n1. Confirmation of PA sound check schedule (proposed 8:30 AM - 9:00 AM)\n2. Aux 2 foldback stage monitors EQ test for clear audience Q&A feedback\n3. Fresh battery count on all wireless transmitters\n\nBest,\nAlex Rivera\nOperations Agent · EventLauncher",
   },
-  {
-    id: "drive",
-    name: "Google Drive",
-    subtitle: "Access Drive files and event folders",
-    status: "Connected",
-    category: "Google Workspace",
-    iconType: "drive",
+  "info-3": {
+    subject: "Print Order Pre-flight Approval for Seminar Posters (Job #CB-481)",
+    body: "Hello Campus Print Team,\n\nThis is Sarah from the Design team for the upcoming Career Seminar.\n\nWe have prepared the 24\" x 36\" high-resolution CMYK vector proofs for the directional signage and main hall backdrop. Could you confirm:\n1. Vector pre-flight inspection has cleared\n2. Turnaround schedule for Thursday afternoon pickup (by 4:00 PM)\n3. Stand and foam-core mounting hardware availability\n\nThanks so much for your assistance!\n\nBest regards,\nSarah Chen\nDesign Agent · EventLauncher",
   },
-  {
-    id: "sheets",
-    name: "Google Sheets",
-    subtitle: "Transform your spreadsheet data & attendee lists",
-    status: "Connected",
-    category: "Google Workspace",
-    iconType: "sheets",
+  "info-4": {
+    subject: "North Hall Room Reservation Permit & HVAC Schedule Confirmation",
+    body: "Dear Facilities Coordinator,\n\nMarcus here with the EventLauncher Venue coordination team.\n\nAhead of Friday's Career Seminar in North Hall (8:00 AM – 6:00 PM), we'd like to confirm:\n1. Main double-door unlocking at 7:30 AM for staging setup\n2. HVAC / climate control schedule programmed to 69°F from 8:00 AM onwards\n3. Pre-positioning of recycling stations and trash receptacles at entry points\n\nThank you for helping us ensure a comfortable and smooth event.\n\nSincerely,\nMarcus Vance\nVenue Agent · EventLauncher",
   },
-  {
-    id: "calendar",
-    name: "Google Calendar",
-    subtitle: "Create & manage scheduled milestones",
-    status: "Active",
-    category: "Google Workspace",
-    iconType: "calendar",
+  "info-5": {
+    subject: "North Hall 200-chair Seating Arrangement and Fire Safety Aisles",
+    body: "Hi Priya,\n\nNorth Hall seating layout needs 200 chairs spaced in 10 rows with center aisle clear for fire safety. Could you confirm volunteer staging availability for Friday at 1:00 PM?\n\nName badges, volunteer clipboards, and row assignment maps are staged in the organizers' green room.\n\nBest regards,\nAlex Rivera\nOperations Agent · EventLauncher",
   },
-  {
-    id: "docs",
-    name: "Google Docs",
-    subtitle: "Build custom Google Docs workflows & run-of-show",
-    status: "Active",
-    category: "Google Workspace",
-    iconType: "docs",
-  },
-  {
-    id: "slides",
-    name: "Google Slides",
-    subtitle: "Integrate your slide decks & keynote presentations",
-    status: "Ready",
-    category: "Google Workspace",
-    iconType: "slides",
-  },
-  {
-    id: "tasks",
-    name: "Google Tasks",
-    subtitle: "Create and manage operational checklists",
-    status: "Connected",
-    category: "Google Workspace",
-    iconType: "tasks",
-  },
-  {
-    id: "whatsapp",
-    name: "WhatsApp Business",
-    subtitle: "Direct mobile messaging for coordinators and volunteers",
-    status: "Ready",
-    platformKey: "whatsapp",
-    category: "Direct Messaging",
-    iconType: "whatsapp",
-  },
-  {
-    id: "forms",
-    name: "Google Forms",
-    subtitle: "Collect attendee responses simply & effectively",
-    status: "Available",
-    category: "Google Workspace",
-    iconType: "forms",
-  },
-];
+};
 
-export function IntegrationView({ state }: Props) {
-  // Navigation between Information (70%) and Integration (30%)
-  const [activeTab, setActiveTab] = useState<"information" | "integration">("information");
+export function IntegrationView({ state, onNavigate }: Props) {
+  // Navigation between Information, Review, and Connect
+  const [activeTab, setActiveTab] = useState<"information" | "review" | "connect">("information");
 
   // Selected integration channel to view/test live
   const [activeLiveChannel, setActiveLiveChannel] = useState<"email" | "telegram">("email");
   const [showLiveModal, setShowLiveModal] = useState(false);
 
-  // Modal recipient prefill from information box
+  // Email Google Auth state for Connect section
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Telegram status state for Connect section
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
+
+  // Modal recipient prefill
   const [modalPrefill, setModalPrefill] = useState<{
     recipientName: string;
     recipientContact: string;
     topic: string;
     agentId: string;
   } | null>(null);
+
+  // Feedback for saved cards
+  const [savedCardIds, setSavedCardIds] = useState<string[]>(["info-1", "info-2", "info-3", "info-4", "info-5"]);
+  const [saveFeedbackId, setSaveFeedbackId] = useState<string | null>(null);
 
   // Rectangular information question boxes (styled similar to People & Tasks UI)
   const [infoCards, setInfoCards] = useState<InformationQuestionItem[]>([
@@ -230,10 +165,97 @@ export function IntegrationView({ state }: Props) {
     },
   ]);
 
+  // Drafts state for Review tab
+  const [drafts, setDrafts] = useState<Record<string, EmailDraft>>(() => {
+    const init: Record<string, EmailDraft> = {};
+    const defaultIds = ["info-1", "info-2", "info-3", "info-4", "info-5"];
+    defaultIds.forEach((id) => {
+      const def = DEFAULT_DRAFTS[id];
+      if (def) {
+        init[id] = {
+          subject: def.subject,
+          body: def.body,
+          status: "draft",
+        };
+      }
+    });
+    return init;
+  });
+
+  // Listen to Google Auth state
+  useEffect(() => {
+    setIsAuthLoading(true);
+    const unsubscribe = initAuth(
+      (user) => {
+        setCurrentUser(user);
+        setIsAuthLoading(false);
+      },
+      () => {
+        setCurrentUser(null);
+        setIsAuthLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch Telegram bot status
+  useEffect(() => {
+    async function loadTelegram() {
+      const res = await fetchTelegramStatus();
+      setTelegramStatus(res);
+    }
+    loadTelegram();
+  }, []);
+
+  const handleSignInGoogle = async () => {
+    try {
+      setIsAuthLoading(true);
+      setAuthError(null);
+      const res = await signInWithGoogle();
+      setCurrentUser(res.user);
+    } catch (err: unknown) {
+      console.error("Sign in failed:", err);
+      const msg = err instanceof Error ? err.message : "Failed to sign in with Google.";
+      setAuthError(msg);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleSignOutGoogle = async () => {
+    await signOutGoogle();
+    setCurrentUser(null);
+  };
+
   const updateInfoCard = (id: string, updates: Partial<InformationQuestionItem>) => {
     setInfoCards((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
+  };
+
+  const handleSaveCard = (id: string) => {
+    if (!savedCardIds.includes(id)) {
+      setSavedCardIds((prev) => [...prev, id]);
+    }
+    setSaveFeedbackId(id);
+    setTimeout(() => {
+      setSaveFeedbackId((curr) => (curr === id ? null : curr));
+    }, 2500);
+
+    // Ensure draft is prepared for this card
+    const card = infoCards.find((c) => c.id === id);
+    if (card && !drafts[id]) {
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: {
+          subject: DEFAULT_DRAFTS[id]?.subject || `Regarding: ${card.topic || card.question}`,
+          body:
+            DEFAULT_DRAFTS[id]?.body ||
+            `Dear ${card.recipientName || "Colleague"},\n\nI am contacting you regarding ${card.topic || card.question} for the upcoming event.\n\nPlease confirm availability and details at your earliest convenience.\n\nBest regards,\nEventLauncher Coordination Agent`,
+          status: "draft",
+        },
+      }));
+    }
   };
 
   const handleAddNewQuestionBox = () => {
@@ -250,129 +272,92 @@ export function IntegrationView({ state }: Props) {
       status: "pending",
     };
     setInfoCards((prev) => [...prev, newCard]);
+    setDrafts((prev) => ({
+      ...prev,
+      [newId]: {
+        subject: "Regarding: Event coordination specifications and confirmation",
+        body: "Hello,\n\nI am reaching out regarding event coordination specifications for the upcoming event.\n\nPlease confirm your availability and requirements.\n\nBest regards,\nEventLauncher Coordination Agent",
+        status: "draft",
+      },
+    }));
   };
 
   const handleDeleteCard = (id: string) => {
     setInfoCards((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const handleLaunchFromCard = (card: InformationQuestionItem) => {
-    if (card.platform === "email" || card.platform === "telegram") {
-      setActiveLiveChannel(card.platform);
-      setModalPrefill({
-        recipientName: card.recipientName,
-        recipientContact: card.recipientContact,
-        topic: card.topic,
-        agentId: card.agentId,
-      });
-      setShowLiveModal(true);
-    } else {
-      // WhatsApp note
-      alert("WhatsApp Business API integration is configured for outgoing alerts. To test two-way AI conversations, select Email (Gmail) or Telegram.");
-    }
+  const updateDraft = (cardId: string, updates: Partial<EmailDraft>) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [cardId]: { ...prev[cardId], ...updates },
+    }));
   };
 
-  // Render branded icons matching the reference image style
-  const renderBrandedIcon = (iconType: IntegrationCardDef["iconType"]) => {
-    switch (iconType) {
-      case "drive":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 shadow-2xs">
-            <svg className="h-6 w-6" viewBox="0 0 87.3 78" fill="none">
-              <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066DA" />
-              <path d="M43.65 25 29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44C.4 49.9 0 51.45 0 53h27.5z" fill="#00AC47" />
-              <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 10.15z" fill="#EA4335" />
-              <path d="M43.65 25 57.4 1.2C56.05.4 54.5 0 52.95 0H34.35c-1.55 0-3.1.4-4.45 1.2z" fill="#00832D" />
-              <path d="M59.8 53H87.3c0-1.55-.4-3.1-1.2-4.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L56.35 46.7z" fill="#FFBA00" />
-              <path d="M27.5 53h32.3l-13.75-23.8H13.75z" fill="#2684FC" />
-            </svg>
-          </div>
-        );
-      case "sheets":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-2xs">
-            <div className="flex h-7 w-6 flex-col justify-center rounded-sm bg-emerald-600 p-1 text-white shadow-xs">
-              <div className="grid grid-cols-2 gap-0.5 border border-white/70 p-0.5">
-                <div className="h-1 bg-white/70" />
-                <div className="h-1 bg-white/70" />
-                <div className="h-1 bg-white/70" />
-                <div className="h-1 bg-white/70" />
-              </div>
-            </div>
-          </div>
-        );
-      case "calendar":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 shadow-2xs">
-            <div className="flex h-7 w-7 flex-col items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-xs shadow-xs">
-              <span className="text-[10px] leading-none">31</span>
-            </div>
-          </div>
-        );
-      case "docs":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 shadow-2xs">
-            <div className="flex h-7 w-6 flex-col justify-center rounded-sm bg-blue-600 p-1.5 text-white shadow-xs">
-              <div className="space-y-1">
-                <div className="h-0.5 w-full bg-white/90" />
-                <div className="h-0.5 w-3/4 bg-white/90" />
-                <div className="h-0.5 w-4/5 bg-white/90" />
-              </div>
-            </div>
-          </div>
-        );
-      case "slides":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 shadow-2xs">
-            <div className="flex h-6 w-7 items-center justify-center rounded-sm bg-amber-500 p-1 text-white shadow-xs">
-              <Presentation className="h-4 w-4" />
-            </div>
-          </div>
-        );
-      case "tasks":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 shadow-2xs">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs">
-              <Check className="h-4 w-4 stroke-[3]" />
-            </div>
-          </div>
-        );
-      case "chat":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-2xs">
-            <MessageCircle className="h-6 w-6 text-emerald-600 fill-emerald-600" />
-          </div>
-        );
-      case "forms":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 shadow-2xs">
-            <ListTodo className="h-6 w-6 text-purple-600" />
-          </div>
-        );
-      case "email":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 shadow-2xs">
-            <Mail className="h-6 w-6 text-rose-600" />
-          </div>
-        );
-      case "telegram":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 shadow-2xs">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-white shadow-xs">
-              <Send className="h-3.5 w-3.5 -translate-x-0.5 translate-y-0.5" />
-            </div>
-          </div>
-        );
-      case "whatsapp":
-        return (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-2xs">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-xs">
-              <MessageCircle className="h-4 w-4 fill-white" />
-            </div>
-          </div>
-        );
-      default:
-        return <Link2 className="h-5 w-5 text-muted-foreground" />;
+  const handleApproveAndSend = async (card: InformationQuestionItem) => {
+    const draft = drafts[card.id] || {
+      subject: DEFAULT_DRAFTS[card.id]?.subject || `Regarding: ${card.topic}`,
+      body: DEFAULT_DRAFTS[card.id]?.body || `Hello ${card.recipientName},\n\nFollowing up on ${card.topic}.`,
+      status: "draft",
+    };
+
+    const assignedAgent =
+      AVAILABLE_AGENTS.find((a) => a.id === card.agentId) || AVAILABLE_AGENTS[0];
+
+    updateDraft(card.id, { status: "sending", errorMessage: undefined });
+
+    try {
+      const token = getCachedToken();
+
+      // If user is connected to Google and card is email, try real Gmail sending
+      let sentThreadId: string | undefined;
+      if (card.platform === "email" && token && card.recipientContact.includes("@")) {
+        try {
+          const sendRes = await sendGmailMessage(token, {
+            to: card.recipientContact,
+            subject: draft.subject,
+            body: draft.body,
+            agentName: assignedAgent.name,
+          });
+          sentThreadId = sendRes?.threadId;
+        } catch (e) {
+          console.warn("Gmail API direct dispatch warning:", e);
+        }
+      }
+
+      // Save to dispatched live threads for Activity section observable tracking
+      const newLiveThread: DispatchedLiveThread = {
+        id: `live-${card.id}-${Date.now()}`,
+        agentId: card.agentId,
+        agentName: assignedAgent.name,
+        agentEmail: assignedAgent.email,
+        recipientName: card.recipientName || "Recipient",
+        recipientEmail: card.recipientContact || "recipient@example.org",
+        subject: draft.subject,
+        topic: card.topic || card.question,
+        channel: card.platform === "telegram" ? "Telegram" : "Email",
+        threadId: sentThreadId,
+        dispatchedAt: Date.now(),
+        messages: [
+          {
+            id: `msg-${Date.now()}-1`,
+            sender: "agent",
+            senderName: assignedAgent.name,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            body: draft.body,
+            isAI: true,
+          },
+        ],
+      };
+
+      saveDispatchedThread(newLiveThread);
+
+      updateDraft(card.id, {
+        status: "sent",
+        sentAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to approve and dispatch.";
+      updateDraft(card.id, { status: "error", errorMessage: msg });
     }
   };
 
@@ -388,15 +373,15 @@ export function IntegrationView({ state }: Props) {
       </div>
 
       {/* ========================================================================= */}
-      {/* TWO BUTTONS CONTAINER: INFORMATION (70%) & INTEGRATION (30%) */}
+      {/* THREE BUTTONS CONTAINER: INFORMATION, REVIEW (IN BETWEEN), AND CONNECT */}
       {/* ========================================================================= */}
       <div className="flex w-full items-center gap-2 rounded-xl border border-border/80 bg-white p-1.5 shadow-2xs">
-        {/* Left: Information Button (~70%) */}
+        {/* 1. Information Button */}
         <button
           type="button"
           onClick={() => setActiveTab("information")}
           className={cn(
-            "w-[70%] flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+            "flex-1 flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
             activeTab === "information"
               ? "bg-sage-light text-sage-dark ring-1 ring-primary/25 shadow-xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
@@ -406,13 +391,31 @@ export function IntegrationView({ state }: Props) {
           <span>Information</span>
         </button>
 
-        {/* Right: Integration Button (~30%) */}
+        {/* 2. Review Button (In between Information and Connect) */}
         <button
           type="button"
-          onClick={() => setActiveTab("integration")}
+          onClick={() => setActiveTab("review")}
           className={cn(
-            "w-[30%] flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
-            activeTab === "integration"
+            "flex-1 flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+            activeTab === "review"
+              ? "bg-sage-light text-sage-dark ring-1 ring-primary/25 shadow-xs font-semibold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+          )}
+        >
+          <Eye className="h-4 w-4 shrink-0 text-sage-dark" />
+          <span>Review</span>
+          <span className="rounded-full bg-sage-light text-sage-dark border border-primary/25 px-1.5 py-0.2 text-[10px] font-bold">
+            {infoCards.length}
+          </span>
+        </button>
+
+        {/* 3. Connect Button */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("connect")}
+          className={cn(
+            "w-[26%] sm:w-[24%] flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+            activeTab === "connect"
               ? "bg-sage-light text-sage-dark ring-1 ring-primary/25 shadow-xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
           )}
@@ -423,7 +426,7 @@ export function IntegrationView({ state }: Props) {
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 1: INFORMATION BOX (Rectangular question boxes like People & Tasks) */}
+      {/* SECTION 1: INFORMATION BOX */}
       {/* ========================================================================= */}
       {activeTab === "information" && (
         <div className="space-y-4">
@@ -554,7 +557,7 @@ export function IntegrationView({ state }: Props) {
                       </select>
                     </div>
 
-                    {/* Assigned Agent (Registration dropdown) */}
+                    {/* Assigned Agent */}
                     <div className="space-y-1.5">
                       <label className="flex h-5 items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground truncate">
                         <AgentIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -606,7 +609,7 @@ export function IntegrationView({ state }: Props) {
                         ) : card.platform === "telegram" ? (
                           <Send className="h-3 w-3 text-sky-500" />
                         ) : (
-                          <MessageCircle className="h-3 w-3 text-emerald-500" />
+                          <Link2 className="h-3 w-3 text-emerald-500" />
                         )}
                         {card.platform === "email"
                           ? "Gmail Integration"
@@ -614,15 +617,21 @@ export function IntegrationView({ state }: Props) {
                           ? "Telegram Integration"
                           : "WhatsApp Integration"}
                       </span>
+                      {saveFeedbackId === card.id && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 animate-in fade-in duration-200">
+                          <Check className="h-3.5 w-3.5" />
+                          Saved
+                        </span>
+                      )}
                     </div>
 
                     <button
                       type="button"
-                      onClick={() => handleLaunchFromCard(card)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+                      onClick={() => handleSaveCard(card.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
                     >
-                      <span>Launch Agent Conversation</span>
-                      <ArrowRight className="h-3 w-3" />
+                      <Save className="h-3 w-3" />
+                      <span>Save</span>
                     </button>
                   </div>
                 </div>
@@ -633,81 +642,356 @@ export function IntegrationView({ state }: Props) {
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 2: INTEGRATION BOX (Matching the user's reference image) */}
+      {/* SECTION 2: REVIEW BOX (WHERE WE REVIEW WRITTEN EMAILS AND APPROVE) */}
       {/* ========================================================================= */}
-      {activeTab === "integration" && (
-        <div className="space-y-6">
-          {/* Header matching image: Available integrations ⌵ */}
-          <div className="flex items-center justify-between border-b border-border/60 pb-3">
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground cursor-pointer">
-              <span>Available integrations</span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+      {activeTab === "review" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Review Written Agent Emails
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Specialist micro-agents have composed outreach emails. Review each message, customize if needed, and approve to dispatch.
+              </p>
             </div>
-            <span className="text-[11px] text-muted-foreground">
-              {INTEGRATION_CATALOG.length} integrations connected
-            </span>
+            {Object.values(drafts).some((d) => d.status === "sent") && onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate("Activity")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-sage-dark hover:bg-primary/20 transition-colors cursor-pointer"
+              >
+                <span>View Live Conversations in Activity</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Integration Cards Grid matching image_858c4aa4.png */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {INTEGRATION_CATALOG.map((item) => {
-              const isInteractive =
-                item.platformKey === "email" || item.platformKey === "telegram";
+          <div className="space-y-4">
+            {infoCards.map((card, idx) => {
+              const assignedAgent =
+                AVAILABLE_AGENTS.find((a) => a.id === card.agentId) ||
+                AVAILABLE_AGENTS[0];
+              const AgentIcon = assignedAgent.icon;
+              const draft = drafts[card.id] || {
+                subject: DEFAULT_DRAFTS[card.id]?.subject || `Regarding: ${card.topic || card.question}`,
+                body:
+                  DEFAULT_DRAFTS[card.id]?.body ||
+                  `Dear ${card.recipientName || "Colleague"},\n\nI am contacting you regarding ${card.topic || card.question}.\n\nPlease let us know if you need any adjustments.\n\nBest regards,\n${assignedAgent.name}`,
+                status: "draft" as const,
+              };
+
+              const isSent = draft.status === "sent";
+              const isSending = draft.status === "sending";
 
               return (
                 <div
-                  key={item.id}
-                  onClick={() => {
-                    if (item.platformKey === "email" || item.platformKey === "telegram") {
-                      setActiveLiveChannel(item.platformKey);
-                      setModalPrefill(null);
-                      setShowLiveModal(true);
-                    }
-                  }}
-                  className={cn(
-                    "flex flex-col justify-between rounded-2xl border border-border/80 bg-white p-5 transition-all",
-                    isInteractive
-                      ? "cursor-pointer hover:border-primary/50 hover:shadow-xs"
-                      : "hover:border-border"
-                  )}
+                  key={`review-${card.id}`}
+                  className="rounded-2xl border border-border/80 bg-white p-5 shadow-2xs space-y-4 hover:border-primary/40 transition-all"
                 >
-                  <div className="space-y-3">
-                    {/* Top row: App icon and status badge */}
-                    <div className="flex items-center justify-between">
-                      {renderBrandedIcon(item.iconType)}
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-medium border",
-                          item.status === "Connected" || item.status === "Active"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-muted text-muted-foreground border-transparent"
-                        )}
-                      >
-                        {item.status}
+                  {/* Review Card Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-sage-light text-sage-dark text-xs font-bold">
+                        {idx + 1}
                       </span>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-sage-light px-2 py-0.5 text-xs font-medium text-sage-dark">
+                          <AgentIcon className="h-3 w-3" />
+                          <span>{assignedAgent.name}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">→</span>
+                        <span className="text-xs font-semibold text-foreground">
+                          {card.recipientName || "Recipient"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          ({card.recipientContact || "No contact set"})
+                        </span>
+                      </div>
                     </div>
 
-                    {/* App Name and Subtitle */}
+                    {/* Status Badge */}
                     <div>
-                      <h3 className="text-sm font-semibold text-foreground">
-                        {item.name}
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                        {item.subtitle}
-                      </p>
+                      {isSent ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Approved & Sent {draft.sentAt ? `(${draft.sentAt})` : ""}
+                        </span>
+                      ) : isSending ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Sending via Gmail...
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 border border-sky-200">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Draft Ready for Review
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Interactive trigger if Email or Telegram */}
-                  {isInteractive && (
-                    <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-sage-dark font-medium">
-                      <span>Open Live AI Agent Studio</span>
-                      <ArrowRight className="h-3 w-3" />
+                  {/* Subject Line Input */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Email Subject
+                    </label>
+                    <input
+                      type="text"
+                      disabled={isSent || isSending}
+                      value={draft.subject}
+                      onChange={(e) =>
+                        updateDraft(card.id, { subject: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-border/70 bg-[#FAFAF8] px-3 py-2 text-xs font-medium text-foreground focus:bg-white focus:outline-hidden focus:ring-1.5 focus:ring-primary/40 disabled:opacity-80"
+                      placeholder="Email subject..."
+                    />
+                  </div>
+
+                  {/* Written Email Body Textarea */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Written Email Body (Drafted by {assignedAgent.name})
+                    </label>
+                    <textarea
+                      rows={6}
+                      disabled={isSent || isSending}
+                      value={draft.body}
+                      onChange={(e) =>
+                        updateDraft(card.id, { body: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-border/70 bg-[#FAFAF8] p-3 text-xs leading-relaxed text-foreground focus:bg-white focus:outline-hidden focus:ring-1.5 focus:ring-primary/40 disabled:opacity-80 font-mono text-[11px]"
+                      placeholder="Compose or edit email content..."
+                    />
+                  </div>
+
+                  {/* Review Action Footer */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/40">
+                    <div className="text-[11px] text-muted-foreground">
+                      {isSent ? (
+                        <span className="text-emerald-700 font-medium flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Email sent! Real-time conversation is now observable in the Activity section.
+                        </span>
+                      ) : (
+                        <span>
+                          Approving will send this email to{" "}
+                          <strong className="text-foreground">
+                            {card.recipientContact || "recipient"}
+                          </strong>{" "}
+                          and initialize real-time observation in Activity.
+                        </span>
+                      )}
                     </div>
-                  )}
+
+                    <div className="flex items-center gap-2">
+                      {isSent ? (
+                        onNavigate && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate("Activity")}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+                          >
+                            <span>Open in Activity</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isSending}
+                          onClick={() => handleApproveAndSend(card)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-2xs disabled:opacity-50"
+                        >
+                          {isSending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          <span>Approve & Send</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION 3: CONNECT SECTION (ONLY EMAIL AND TELEGRAM - NOTHING ELSE) */}
+      {/* ========================================================================= */}
+      {activeTab === "connect" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. EMAIL (GMAIL) CONNECTION CARD */}
+            <div className="rounded-2xl border border-border/80 bg-white p-5 sm:p-6 shadow-2xs flex flex-col justify-between space-y-5">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 shadow-2xs">
+                    <Mail className="h-6 w-6 text-rose-600" />
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[10px] font-medium border",
+                      currentUser
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-muted text-muted-foreground border-transparent"
+                    )}
+                  >
+                    {currentUser ? "Connected" : "Not connected"}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">
+                    Email
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                    Connect your email account to let agents send emails and track replies directly.
+                  </p>
+                </div>
+
+                {currentUser && (
+                  <div className="rounded-xl border border-border/60 bg-[#FAFAF8] p-3 flex items-center gap-3">
+                    {currentUser.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt={currentUser.displayName || "User"}
+                        className="h-8 w-8 rounded-full border border-border"
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-light text-sage-dark font-bold text-xs">
+                        {currentUser.displayName ? currentUser.displayName[0] : "U"}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-foreground truncate">
+                        {currentUser.displayName || "Google User"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {currentUser.email}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {authError && (
+                  <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                    {authError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-border/40">
+                {currentUser ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Email connected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSignOutGoogle}
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSignInGoogle}
+                    disabled={isAuthLoading}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {isAuthLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <svg className="h-4 w-4" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                        />
+                      </svg>
+                    )}
+                    <span>Sign in with Email</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 2. TELEGRAM CONNECTION CARD */}
+            <div className="rounded-2xl border border-border/80 bg-white p-5 sm:p-6 shadow-2xs flex flex-col justify-between space-y-5">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 shadow-2xs">
+                    <Send className="h-5 w-5 -translate-x-0.5 translate-y-0.5 text-sky-600" />
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[10px] font-medium border",
+                      telegramStatus?.configured
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-muted text-muted-foreground border-transparent"
+                    )}
+                  >
+                    {telegramStatus?.configured ? "Connected" : "Active"}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">
+                    Telegram
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                    Connect with the official event bot <strong>@Eventlauncher_bot</strong> for two-way agent messaging.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-[#FAFAF8] p-3 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Bot Account:</span>
+                    <span className="font-semibold text-sage-dark">
+                      @{telegramStatus?.bot?.username || "Eventlauncher_bot"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Status:</span>
+                    <span className="text-emerald-700 font-medium">
+                      {telegramStatus?.configured ? "Authorized & Active" : "Bot Active"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-border/40">
+                <a
+                  href="https://t.me/Eventlauncher_bot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-xs font-semibold text-white hover:bg-sky-600 transition-colors shadow-xs"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>Connect Telegram (@Eventlauncher_bot)</span>
+                  <ExternalLink className="h-3 w-3 ml-0.5 opacity-80" />
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}

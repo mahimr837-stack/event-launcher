@@ -42,7 +42,7 @@ const Index = () => {
     <div className="flex min-w-0 flex-1 flex-col">
       <main className="flex min-h-0 flex-1 overflow-hidden"><div key={generation} className={cn("min-w-0 flex-1 bg-[#F2F5F0]", (view === "Workspace" || view === "Agents") ? "overflow-hidden" : "soft-scroll overflow-y-auto")}>
         {view === "Workspace" && <Workspace state={state} dispatch={dispatch} navigate={navigate} onEdit={() => setEditOpen(true)} onReview={reviewPlan}/>}
-        {(view === "Ecosystem" || view === "Integration") && <IntegrationView state={state} onWorkspace={() => navigate("Workspace")}/>}
+        {(view === "Ecosystem" || view === "Integration") && <IntegrationView state={state} onWorkspace={() => navigate("Workspace")} onNavigate={navigate}/>}
         {view === "Event Plan" && <EventPlan state={state} dispatch={dispatch} onEdit={() => setEditOpen(true)} onReview={reviewPlan}/>}
         {view === "Agents" && <Agents state={state} onPlan={() => navigate("Event Plan")}/>}
         {view === "People & Tasks" && <PeopleTasks state={state} dispatch={dispatch} onWorkspace={() => navigate("Workspace")}/>}

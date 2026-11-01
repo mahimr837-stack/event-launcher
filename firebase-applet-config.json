@@ -3,6 +3,7 @@
   "appId": "1:433495900848:web:97bdbc13608222811bf175",
   "apiKey": "AIzaSyC7RSRPRVI8b6SAXk5wv9RK1idoF0VHs4I",
   "authDomain": "vivid-bolt-0zp2g.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-eventlauncher-a0176ea1-c484-4631-b562-747c470d3634",
   "storageBucket": "vivid-bolt-0zp2g.firebasestorage.app",
   "messagingSenderId": "433495900848",
   "measurementId": "",

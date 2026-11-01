@@ -1,4 +1,4 @@
-import { useState, type Dispatch } from "react";
+import { useState, useEffect, type Dispatch } from "react";
 import {
   Check,
   Mail,
@@ -9,9 +9,14 @@ import {
   Palette,
   UsersRound,
   Wrench,
+  Sparkles,
+  RotateCw,
+  Loader2,
 } from "lucide-react";
 import { type Channel, type DemoAction, type DemoState } from "@/lib/event-demo";
 import { cn } from "@/lib/utils";
+import { getDispatchedThreads, saveDispatchedThread, type DispatchedLiveThread } from "@/lib/dispatched-threads";
+import { getCachedToken, signInWithGoogle, searchAndFetchGmailThread, cleanEmailBody } from "@/lib/gmail-client";
 
 interface Props {
   state: DemoState;
@@ -91,6 +96,8 @@ interface AgentConversationThread {
   topic: string;
   channel: "Email" | "WhatsApp";
   agentIcon: typeof Wrench;
+  isLiveDispatched?: boolean;
+  threadId?: string;
   messages: Array<{
     id: string;
     sender: "agent" | "recipient";
@@ -335,15 +342,166 @@ export function notificationText(state: DemoState, _channel: Channel): string {
 }
 
 export function ActivityView({ _state }: { _state?: DemoState; [key: string]: unknown }) {
-  // Reference Threads State (Existing Activity page features)
+  const [liveDispatches, setLiveDispatches] = useState<DispatchedLiveThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string>("sound-check-thread");
   const [channelFilter, setChannelFilter] = useState<"All" | "Email" | "WhatsApp">("All");
 
-  const filteredThreads = AGENT_THREADS.filter(
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const list = getDispatchedThreads();
+    setLiveDispatches(list);
+    if (list.length > 0) {
+      setSelectedThreadId(list[0].id);
+    }
+
+    const handler = () => {
+      const updated = getDispatchedThreads();
+      setLiveDispatches(updated);
+      if (updated.length > 0) {
+        setSelectedThreadId(updated[0].id);
+      }
+    };
+    window.addEventListener("eventlauncher_threads_updated", handler);
+    return () => window.removeEventListener("eventlauncher_threads_updated", handler);
+  }, []);
+
+  const agentIconMap = {
+    guests: UsersRound,
+    operations: Wrench,
+    design: Palette,
+    venue: Building2,
+  };
+
+  const combinedThreads: AgentConversationThread[] = [
+    ...liveDispatches.map((t) => ({
+      id: t.id,
+      agentId: t.agentId,
+      agentName: t.agentName,
+      agentEmail: t.agentEmail,
+      recipientName: t.recipientName,
+      recipientEmail: t.recipientEmail,
+      subject: t.subject,
+      topic: t.topic,
+      channel: (t.channel === "Telegram" ? "WhatsApp" : "Email") as "Email" | "WhatsApp",
+      agentIcon: agentIconMap[t.agentId] || UsersRound,
+      isLiveDispatched: true,
+      threadId: t.threadId,
+      messages: t.messages,
+    })),
+    ...AGENT_THREADS,
+  ];
+
+  const filteredThreads = combinedThreads.filter(
     (t) => channelFilter === "All" || t.channel === channelFilter
   );
-  const activeThread = AGENT_THREADS.find((t) => t.id === selectedThreadId) || AGENT_THREADS[0];
+  const activeThread = combinedThreads.find((t) => t.id === selectedThreadId) || combinedThreads[0] || AGENT_THREADS[0];
   const AgentIcon = activeThread.agentIcon;
+
+  const handleRefreshReplies = async (thread: AgentConversationThread) => {
+    setIsRefreshing(true);
+    setRefreshMessage(null);
+
+    try {
+      let token = getCachedToken();
+      if (!token) {
+        try {
+          const authRes = await signInWithGoogle();
+          token = authRes.accessToken;
+        } catch {
+          setRefreshMessage("Please connect your Google account in Ecosystem → Connect to fetch live replies.");
+          setIsRefreshing(false);
+          return;
+        }
+      }
+
+      if (!token) {
+        setRefreshMessage("No active Gmail session found. Connect Google in Ecosystem → Connect.");
+        setIsRefreshing(false);
+        return;
+      }
+
+      const result = await searchAndFetchGmailThread(token, {
+        threadId: thread.threadId,
+        recipientEmail: thread.recipientEmail,
+        subject: thread.subject,
+      });
+
+      if (!result || !result.messages || result.messages.length === 0) {
+        setRefreshMessage(`Checked Gmail (${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) — no replies found yet.`);
+        return;
+      }
+
+      // Filter messages that are incoming from recipient (not from me)
+      const incomingReplies = result.messages.filter((m) => !m.isFromMe);
+
+      // Check which ones are not yet in thread.messages
+      const existingIds = new Set(thread.messages.map((m) => m.id));
+      const existingCleanBodies = new Set(
+        thread.messages.map((m) => cleanEmailBody(m.body).toLowerCase().trim())
+      );
+
+      const newReplies = incomingReplies.filter((reply) => {
+        const cleanB = cleanEmailBody(reply.body || reply.snippet).toLowerCase().trim();
+        return !existingIds.has(reply.id) && !existingCleanBodies.has(cleanB) && cleanB.length > 0;
+      });
+
+      if (newReplies.length === 0) {
+        setRefreshMessage(`Checked Gmail (${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) — no new replies yet.`);
+        return;
+      }
+
+      // Format incoming replies into messages
+      const newReplyMessages = newReplies.map((reply) => ({
+        id: reply.id,
+        sender: "recipient" as const,
+        senderName: thread.recipientName || reply.from.split("<")[0].trim() || "Recipient",
+        time: new Date(reply.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        body: cleanEmailBody(reply.body) || reply.snippet || "(No content)",
+      }));
+
+      // Generate automatic AI agent acknowledgment
+      const replyBodyClean = newReplyMessages[newReplyMessages.length - 1].body;
+      const autoAckTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const autoAckMessage = {
+        id: `ack-${Date.now()}`,
+        sender: "agent" as const,
+        senderName: thread.agentName,
+        time: autoAckTime,
+        body: `Thank you for your response, ${thread.recipientName.split(" ")[0] || "there"}!\n\nI have registered your update: "${replyBodyClean.slice(0, 140)}${replyBodyClean.length > 140 ? "..." : ""}" into our event management system. Our coordination team has marked this item as verified.`,
+      };
+
+      const updatedAllMessages = [...thread.messages, ...newReplyMessages, autoAckMessage];
+
+      // Save to localStorage and notify UI
+      saveDispatchedThread({
+        id: thread.id,
+        agentId: (thread.agentId as "guests" | "operations" | "design" | "venue") || "guests",
+        agentName: thread.agentName,
+        agentEmail: thread.agentEmail,
+        recipientName: thread.recipientName,
+        recipientEmail: thread.recipientEmail,
+        subject: thread.subject,
+        topic: thread.topic,
+        channel: thread.channel === "WhatsApp" ? "Telegram" : "Email",
+        threadId: result.threadId || thread.threadId,
+        dispatchedAt: Date.now(),
+        messages: updatedAllMessages,
+      });
+
+      setRefreshMessage(`Retrieved new reply from ${thread.recipientName}! Agent has indexed the response.`);
+    } catch (err: unknown) {
+      console.error("Refresh error:", err);
+      const msg = err instanceof Error ? err.message : "Failed to fetch replies.";
+      setRefreshMessage(`Could not fetch replies: ${msg}`);
+    } finally {
+      setIsRefreshing(false);
+      setTimeout(() => {
+        setRefreshMessage(null);
+      }, 6000);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-5 sm:p-8 lg:p-10 space-y-7">
@@ -409,10 +567,18 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
                     )}
                   >
                     <div className="flex w-full items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground">
-                        <Icon className="h-3.5 w-3.5" />
-                        {thread.agentName.replace(" Agent", "")}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground">
+                          <Icon className="h-3.5 w-3.5" />
+                          {thread.agentName.replace(" Agent", "")}
+                        </span>
+                        {thread.isLiveDispatched && (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
+                            <Check className="h-2.5 w-2.5" />
+                            Live
+                          </span>
+                        )}
+                      </div>
                       <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
                         {thread.channel === "Email" ? <Mail className="h-2.5 w-2.5" /> : <MessageSquare className="h-2.5 w-2.5" />}
                         {thread.channel}
@@ -456,7 +622,37 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
                       <p className="mt-1 text-[10px] text-muted-foreground">Topic: {activeThread.topic}</p>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Small tiny refresh button */}
+                    {activeThread.channel === "Email" && (
+                      <button
+                        type="button"
+                        onClick={() => handleRefreshReplies(activeThread)}
+                        disabled={isRefreshing}
+                        title="Check Gmail for replies from this recipient"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-white px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-sage-light hover:text-sage-dark hover:border-primary/40 transition-all shadow-2xs cursor-pointer disabled:opacity-60"
+                      >
+                        <RotateCw className={cn("h-3 w-3", isRefreshing && "animate-spin text-primary")} />
+                        <span>{isRefreshing ? "Checking..." : "Refresh"}</span>
+                      </button>
+                    )}
+
+                    {activeThread.isLiveDispatched && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800 border border-emerald-200">
+                        <Check className="h-3 w-3 text-emerald-600" />
+                        Approved & Dispatched via Gmail API
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {/* Feedback message banner if refreshed */}
+                {refreshMessage && (
+                  <div className="mt-2.5 rounded-lg border border-primary/25 bg-sage-light/60 px-3 py-1.5 text-[11px] text-sage-dark flex items-center justify-between animate-in fade-in">
+                    <span>{refreshMessage}</span>
+                  </div>
+                )}
 
                 {/* Sender & Recipient Metadata */}
                 <div className="mt-3.5 grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-white p-3 text-[11px] sm:grid-cols-2">
@@ -532,7 +728,22 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
                               {isAgent ? "(AI Agent)" : "(Contact)"}
                             </span>
                           </div>
-                          <span className="text-[10px] text-muted-foreground">{message.time}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground">{message.time}</span>
+                            {/* Small tiny refresh button on the last message */}
+                            {activeThread.channel === "Email" && isLast && (
+                              <button
+                                type="button"
+                                onClick={() => handleRefreshReplies(activeThread)}
+                                disabled={isRefreshing}
+                                title="Refresh to fetch latest email replies"
+                                className="inline-flex items-center gap-1 rounded border border-border/70 bg-white px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
+                              >
+                                <RotateCw className={cn("h-2.5 w-2.5", isRefreshing && "animate-spin text-primary")} />
+                                <span>{isRefreshing ? "..." : "Refresh"}</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Message Body */}
@@ -551,6 +762,25 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
                     </div>
                   );
                 })}
+
+                {/* Bottom live sync banner for Email channel */}
+                {activeThread.channel === "Email" && (
+                  <div className="flex items-center justify-between rounded-xl border border-dashed border-border/80 bg-white/70 p-3 text-[11px]">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Sent a reply to this email? Click to sync your incoming reply:</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRefreshReplies(activeThread)}
+                      disabled={isRefreshing}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60 shadow-2xs"
+                    >
+                      <RotateCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+                      <span>{isRefreshing ? "Checking inbox..." : "Refresh Replies"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Footer Summary */}
