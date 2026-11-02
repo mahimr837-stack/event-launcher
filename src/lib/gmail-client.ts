@@ -22,25 +22,70 @@ export const GMAIL_SCOPES = [
 
 const provider = new GoogleAuthProvider();
 GMAIL_SCOPES.forEach((scope) => provider.addScope(scope));
+// Use select_account so user can easily choose their account without repetitive re-consent issues
 provider.setCustomParameters({
-  prompt: "consent",
+  prompt: "select_account",
 });
 
-// In-memory access token cache
-let cachedAccessToken: string | null = null;
+const TOKEN_STORAGE_KEY = "eventlauncher_gmail_oauth_token";
+
+export function getStoredToken(): string | null {
+  try {
+    const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // OAuth access tokens are valid for up to 3 hours with leeway
+    if (parsed.token && Date.now() - (parsed.savedAt || 0) < 3 * 3600 * 1000) {
+      return parsed.token;
+    }
+  } catch (err) {
+    console.debug("Failed to read stored OAuth token:", err);
+  }
+  return null;
+}
+
+export function saveStoredToken(token: string, user: User) {
+  try {
+    localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      JSON.stringify({
+        token,
+        savedAt: Date.now(),
+        email: user.email,
+        displayName: user.displayName,
+      })
+    );
+  } catch (err) {
+    console.debug("Failed to persist OAuth token:", err);
+  }
+}
+
+export function clearStoredToken() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch (err) {
+    console.debug("Failed to clear OAuth token:", err);
+  }
+}
+
+// In-memory access token cache initialized from storage if available
+let cachedAccessToken: string | null = getStoredToken();
 let isSigningIn = false;
 
 export function initAuth(
-  onSuccess: (user: User, token: string) => void,
+  onSuccess: (user: User, token: string | null) => void,
   onFailure: () => void
 ) {
   return onAuthStateChanged(auth, async (user) => {
-    if (user && cachedAccessToken) {
-      onSuccess(user, cachedAccessToken);
-    } else if (!isSigningIn) {
-      if (!user) {
-        cachedAccessToken = null;
+    const token = cachedAccessToken || getStoredToken();
+    if (user) {
+      if (token) {
+        cachedAccessToken = token;
       }
+      onSuccess(user, token);
+    } else if (!isSigningIn) {
+      cachedAccessToken = null;
+      clearStoredToken();
       onFailure();
     }
   });
@@ -49,13 +94,35 @@ export function initAuth(
 export async function signInWithGoogle(): Promise<{ user: User; accessToken: string }> {
   try {
     isSigningIn = true;
+
+    // Open popup for Google account authentication
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
-      throw new Error("Could not retrieve Google OAuth access token from sign-in.");
+      throw new Error("Could not retrieve Google OAuth access token from sign-in. Please ensure third-party cookies and popups are permitted.");
     }
     cachedAccessToken = credential.accessToken;
+    saveStoredToken(cachedAccessToken, result.user);
     return { user: result.user, accessToken: cachedAccessToken };
+  } catch (err: unknown) {
+    const errorObj = err as { code?: string; message?: string };
+    if (errorObj?.code === "auth/popup-blocked") {
+      throw new Error(
+        "Popup was blocked by your browser. Please allow popups for this site (check the address bar icon) and click again to connect."
+      );
+    }
+    if (errorObj?.code === "auth/popup-closed-by-user") {
+      throw new Error(
+        "Sign-in window was closed before finishing. Click Sign in with Email to try again."
+      );
+    }
+    if (errorObj?.code === "auth/cancelled-popup-request") {
+      throw new Error("Sign-in popup was cancelled. Please click Sign in with Email again.");
+    }
+    if (errorObj?.code === "auth/network-request-failed") {
+      throw new Error("Network error during sign-in. Please check your connection and try again.");
+    }
+    throw err;
   } finally {
     isSigningIn = false;
   }
@@ -64,10 +131,11 @@ export async function signInWithGoogle(): Promise<{ user: User; accessToken: str
 export async function signOutGoogle(): Promise<void> {
   await signOut(auth);
   cachedAccessToken = null;
+  clearStoredToken();
 }
 
 export function getCachedToken(): string | null {
-  return cachedAccessToken;
+  return cachedAccessToken || getStoredToken();
 }
 
 // Base64URL string encoder (handles UTF-8 strings properly)

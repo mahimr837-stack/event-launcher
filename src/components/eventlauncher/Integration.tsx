@@ -186,7 +186,7 @@ export function IntegrationView({ state, onNavigate }: Props) {
   useEffect(() => {
     setIsAuthLoading(true);
     const unsubscribe = initAuth(
-      (user) => {
+      (user, _token) => {
         setCurrentUser(user);
         setIsAuthLoading(false);
       },
@@ -879,9 +879,17 @@ export function IntegrationView({ state, onNavigate }: Props) {
                 )}
 
                 {authError && (
-                  <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
-                    {authError}
-                  </p>
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 space-y-1.5 text-xs text-rose-700">
+                    <p className="font-semibold text-rose-800">
+                      Unable to complete Google sign-in
+                    </p>
+                    <p className="text-[11px] text-rose-700 leading-relaxed">
+                      {authError}
+                    </p>
+                    <p className="text-[10px] text-rose-600/90 pt-1 border-t border-rose-200/60">
+                      💡 Tip: If a popup was blocked, look for the popup icon in your browser's address bar to allow popups for this app, then click Sign in again.
+                    </p>
+                  </div>
                 )}
               </div>
 
