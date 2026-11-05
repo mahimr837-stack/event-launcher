@@ -37,10 +37,7 @@ export function createInitialState(): DemoState {
     stage: "date", event: { date: "", time: "14:00", venue: "", venueConfirmed: false, permission: false, speaker: "", audience: 0 },
     plan: "Not started", connections: { Email: false, WhatsApp: false, Telegram: false }, now: DEMO_DATE,
     venueRequest: "Not started", announcement: "Not started", invitation: "Not started", riskShown: false,
-    messages: [
-      { id: 1, role: "user", text: "I want to organize a career seminar at my university." },
-      { id: 2, role: "assistant", text: "Let’s bring it together. I’ll help you plan the seminar, coordinate your team, and keep an eye on the details.\n\nFirst, when would you like to hold it?" },
-    ],
+    messages: [],
     tasks: [
       // Needs attention (Overdue / Blocked)
       {
@@ -160,6 +157,9 @@ export type DemoAction =
   | { type: "ADVANCE_CLOCK" }
   | { type: "SUMMARY" }
   | { type: "GUIDANCE"; text?: string }
+  | { type: "ADD_USER_MESSAGE"; text: string }
+  | { type: "ADD_ASSISTANT_MESSAGE"; text: string; extractedDetails?: Partial<EventDetails & { name?: string }> }
+  | { type: "UPDATE_EVENT"; details: Partial<EventDetails & { name?: string }> }
   | { type: "RESET" };
 function say(state: DemoState, role: Message["role"], text: string, kind?: "risk"): void {
   state.messages.push({ id: state.messages.length + 1, role, text, ...(kind ? { kind } : {}) });
@@ -176,6 +176,34 @@ export function demoReducer(previous: DemoState, action: DemoAction): DemoState 
   if (action.type === "RESET") return createInitialState();
   const state: DemoState = { ...previous, event: { ...previous.event }, messages: [...previous.messages], tasks: previous.tasks.map(t => ({ ...t })), connections: { ...previous.connections }, activities: [...previous.activities] };
   switch (action.type) {
+    case "ADD_USER_MESSAGE": {
+      say(state, "user", action.text);
+      break;
+    }
+    case "ADD_ASSISTANT_MESSAGE": {
+      say(state, "assistant", action.text);
+      if (action.extractedDetails) {
+        if (action.extractedDetails.date) {
+          state.event.date = action.extractedDetails.date;
+          state.tasks.forEach(t => { t.deadline = offsetDate(action.extractedDetails!.date!, t.id === "av" ? -1 : 0); });
+        }
+        if (action.extractedDetails.time) state.event.time = action.extractedDetails.time;
+        if (action.extractedDetails.venue) {
+          state.event.venue = action.extractedDetails.venue;
+          state.event.venueConfirmed = true;
+        }
+        if (action.extractedDetails.speaker) state.event.speaker = action.extractedDetails.speaker;
+        if (action.extractedDetails.audience) state.event.audience = action.extractedDetails.audience;
+        if (state.plan === "Not started" && (action.extractedDetails.date || action.extractedDetails.venue)) {
+          state.plan = "Proposed";
+        }
+      }
+      break;
+    }
+    case "UPDATE_EVENT": {
+      state.event = { ...state.event, ...action.details };
+      break;
+    }
     case "ANSWER": {
       const value = action.value.trim();
       if (!value) return previous;

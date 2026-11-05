@@ -1,0 +1,186 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Event",
+      "description": "University event workspace details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "date": { "type": "string", "maxLength": 30 },
+        "time": { "type": "string", "maxLength": 30 },
+        "venue": { "type": "string", "maxLength": 200 },
+        "venueConfirmed": { "type": "boolean" },
+        "permission": { "type": "boolean" },
+        "speaker": { "type": "string", "maxLength": 200 },
+        "audience": { "type": "number" },
+        "budget": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "date"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Operational task for the event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 300 },
+        "owner": { "type": "string", "maxLength": 150 },
+        "email": { "type": "string", "maxLength": 150 },
+        "deadline": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "maxLength": 50 },
+        "note": { "type": "string", "maxLength": 1000 },
+        "venueDependent": { "type": "boolean" }
+      },
+      "required": ["title", "owner", "deadline", "status"]
+    },
+    "StakeholderInquiry": {
+      "title": "StakeholderInquiry",
+      "description": "Inquiry or coordination question for external or internal stakeholder",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "question": { "type": "string", "maxLength": 300 },
+        "title": { "type": "string", "maxLength": 200 },
+        "recipientName": { "type": "string", "maxLength": 150 },
+        "recipientContact": { "type": "string", "maxLength": 200 },
+        "platform": { "type": "string", "maxLength": 50 },
+        "agentId": { "type": "string", "maxLength": 50 },
+        "topic": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "maxLength": 50 },
+        "draftSubject": { "type": "string", "maxLength": 300 },
+        "draftBody": { "type": "string", "maxLength": 5000 }
+      },
+      "required": ["question", "recipientContact", "platform", "agentId"]
+    },
+    "DispatchedThread": {
+      "title": "DispatchedThread",
+      "description": "Active communication thread between micro-agent and stakeholder",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "agentId": { "type": "string", "maxLength": 50 },
+        "agentName": { "type": "string", "maxLength": 150 },
+        "agentEmail": { "type": "string", "maxLength": 150 },
+        "recipientName": { "type": "string", "maxLength": 150 },
+        "recipientEmail": { "type": "string", "maxLength": 200 },
+        "subject": { "type": "string", "maxLength": 300 },
+        "topic": { "type": "string", "maxLength": 300 },
+        "channel": { "type": "string", "maxLength": 50 },
+        "threadId": { "type": "string", "maxLength": 200 },
+        "dispatchedAt": { "type": "number" },
+        "messages": { "type": "array" }
+      },
+      "required": ["agentId", "recipientEmail", "channel", "dispatchedAt"]
+    },
+    "AdminSetting": {
+      "title": "AdminSetting",
+      "description": "System configuration and administrative settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "key": { "type": "string", "maxLength": 100 },
+        "value": { "type": "string", "maxLength": 5000 },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "updatedBy": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["key", "value"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Administrative actions audit log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 150 },
+        "adminEmail": { "type": "string", "maxLength": 150 },
+        "details": { "type": "string", "maxLength": 2000 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["action", "adminEmail", "timestamp"]
+    },
+    "AgentCreationEvent": {
+      "title": "AgentCreationEvent",
+      "description": "Real-time backend status of Lead Coordinator creating a new micro-specialized agent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "agentId": { "type": "string", "maxLength": 50 },
+        "agentName": { "type": "string", "maxLength": 150 },
+        "domain": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["creating", "created"], "maxLength": 20 },
+        "stateText": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["agentName", "status"]
+    },
+    "Agent": {
+      "title": "Agent",
+      "description": "Registered micro-specialized agent in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "domain": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name"]
+    },
+    "KnowledgeBaseEntry": {
+      "title": "KnowledgeBaseEntry",
+      "description": "Organizational knowledge base guide, policy, or best practice article",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 300 },
+        "content": { "type": "string", "maxLength": 100000 },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["title", "content"]
+    }
+  },
+  "firestore": {
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Event workspace document"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Tasks collection"
+    },
+    "/stakeholder_inquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/StakeholderInquiry" },
+      "description": "Inquiries for stakeholders"
+    },
+    "/dispatched_threads/{threadId}": {
+      "schema": { "$ref": "#/entities/DispatchedThread" },
+      "description": "Live conversation threads"
+    },
+    "/agent_creation_events/{eventId}": {
+      "schema": { "$ref": "#/entities/AgentCreationEvent" },
+      "description": "Real-time backend agent creation events stream"
+    },
+    "/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/Agent" },
+      "description": "Micro-specialized agents registered in the system"
+    },
+    "/knowledge_base/{entryId}": {
+      "schema": { "$ref": "#/entities/KnowledgeBaseEntry" },
+      "description": "Knowledge base entries collection read by AI agents and managed by admins"
+    },
+    "/admin_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AdminSetting" },
+      "description": "Administrative settings collection restricted exclusively to mahimr837@gmail.com"
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Administrative audit logs collection restricted exclusively to mahimr837@gmail.com"
+    }
+  }
+}

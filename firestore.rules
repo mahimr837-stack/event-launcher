@@ -1,0 +1,182 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // STRICT ADMIN VALIDATION: Only mahimr837@gmail.com is an admin!
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == "mahimr837@gmail.com";
+    }
+
+    // Entity Validators
+    function isValidEvent(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && (!('category' in data) || (data.category is string && data.category.size() <= 100))
+        && (!('date' in data) || (data.date is string && data.date.size() <= 30))
+        && (!('time' in data) || (data.time is string && data.time.size() <= 30))
+        && (!('venue' in data) || (data.venue is string && data.venue.size() <= 200))
+        && (!('venueConfirmed' in data) || (data.venueConfirmed is bool))
+        && (!('permission' in data) || (data.permission is bool))
+        && (!('speaker' in data) || (data.speaker is string && data.speaker.size() <= 200))
+        && (!('audience' in data) || (data.audience is number && data.audience >= 0 && data.audience <= 100000))
+        && (!('budget' in data) || (data.budget is string && data.budget.size() <= 50))
+        && (!('status' in data) || (data.status is string && data.status.size() <= 50));
+    }
+
+    function isValidTask(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.owner is string && data.owner.size() > 0 && data.owner.size() <= 150
+        && (!('email' in data) || (data.email is string && data.email.size() <= 150))
+        && (!('deadline' in data) || (data.deadline is string && data.deadline.size() <= 30))
+        && (!('status' in data) || (data.status is string && data.status.size() <= 50))
+        && (!('note' in data) || (data.note is string && data.note.size() <= 1000))
+        && (!('venueDependent' in data) || (data.venueDependent is bool));
+    }
+
+    function isValidStakeholderInquiry(data) {
+      return data.question is string && data.question.size() > 0 && data.question.size() <= 300
+        && (!('recipientName' in data) || (data.recipientName is string && data.recipientName.size() <= 150))
+        && (!('recipientContact' in data) || (data.recipientContact is string && data.recipientContact.size() <= 200))
+        && (!('platform' in data) || (data.platform is string && data.platform.size() <= 50))
+        && (!('agentId' in data) || (data.agentId is string && data.agentId.size() <= 50))
+        && (!('topic' in data) || (data.topic is string && data.topic.size() <= 300))
+        && (!('status' in data) || (data.status is string && data.status.size() <= 50))
+        && (!('draftSubject' in data) || (data.draftSubject is string && data.draftSubject.size() <= 300))
+        && (!('draftBody' in data) || (data.draftBody is string && data.draftBody.size() <= 5000));
+    }
+
+    function isValidDispatchedThread(data) {
+      return data.agentId is string && data.agentId.size() > 0 && data.agentId.size() <= 50
+        && (!('agentName' in data) || (data.agentName is string && data.agentName.size() <= 150))
+        && (!('recipientName' in data) || (data.recipientName is string && data.recipientName.size() <= 150))
+        && (!('recipientEmail' in data) || (data.recipientEmail is string && data.recipientEmail.size() <= 200))
+        && (!('channel' in data) || (data.channel is string && data.channel.size() <= 50))
+        && (!('subject' in data) || (data.subject is string && data.subject.size() <= 300))
+        && (!('threadId' in data) || (data.threadId is string && data.threadId.size() <= 200))
+        && (!('messages' in data) || (data.messages is list && data.messages.size() <= 200));
+    }
+
+    function isValidAdminSetting(data) {
+      return data.key is string && data.key.size() > 0 && data.key.size() <= 100
+        && data.value is string && data.value.size() <= 5000;
+    }
+
+    function isValidAdminAuditLog(data) {
+      return data.action is string && data.action.size() > 0 && data.action.size() <= 150
+        && data.adminEmail is string && data.adminEmail.size() > 0 && data.adminEmail.size() <= 150
+        && data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 50;
+    }
+
+    function isValidKnowledgeBaseEntry(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.content is string && data.content.size() <= 100000;
+    }
+
+    function isValidAgentCreationEvent(data) {
+      return data.agentName is string && data.agentName.size() > 0 && data.agentName.size() <= 150
+        && data.status is string && (data.status == "creating" || data.status == "created")
+        && (!('stateText' in data) || (data.stateText is string && data.stateText.size() <= 100))
+        && (!('agentId' in data) || (data.agentId is string && data.agentId.size() <= 50))
+        && (!('domain' in data) || (data.domain is string && data.domain.size() <= 200))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    function isValidAgent(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150
+        && (!('domain' in data) || (data.domain is string && data.domain.size() <= 200))
+        && (!('status' in data) || (data.status is string && data.status.size() <= 50))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    // Connection testing doc
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Events collection: Normal users can read and update; ONLY admin can delete
+    match /events/{eventId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(eventId) && isValidEvent(incoming());
+      allow delete: if isAdmin() && isValidId(eventId);
+    }
+
+    // Tasks collection: Normal users can read and update; ONLY admin can delete
+    match /tasks/{taskId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(taskId) && isValidTask(incoming());
+      allow delete: if isAdmin() && isValidId(taskId);
+    }
+
+    // Stakeholder inquiries collection: Normal users can read and update; ONLY admin can delete
+    match /stakeholder_inquiries/{inquiryId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(inquiryId) && isValidStakeholderInquiry(incoming());
+      allow delete: if isAdmin() && isValidId(inquiryId);
+    }
+
+    // Dispatched live communication threads
+    match /dispatched_threads/{threadId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(threadId) && isValidDispatchedThread(incoming());
+      allow delete: if isAdmin() && isValidId(threadId);
+    }
+
+    // Agent creation events: real-time stream of Lead Coordinator creating specialized agents
+    match /agent_creation_events/{eventId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(eventId) && isValidAgentCreationEvent(incoming());
+      allow delete: if isAdmin() && isValidId(eventId);
+    }
+
+    // Registered agents collection
+    match /agents/{agentId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(agentId) && isValidAgent(incoming());
+      allow delete: if isAdmin() && isValidId(agentId);
+    }
+
+    // Knowledge Base collection: Readable by all (including AI agents); only admin can create, update, delete
+    match /knowledge_base/{entryId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidId(entryId) && isValidKnowledgeBaseEntry(incoming());
+      allow delete: if isAdmin() && isValidId(entryId);
+    }
+
+    // ADMIN-ONLY: System settings collection restricted strictly to mahimr837@gmail.com
+    match /admin_settings/{settingId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(settingId) && isValidAdminSetting(incoming());
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+
+    // ADMIN-ONLY: System audit logs collection restricted strictly to mahimr837@gmail.com
+    match /admin_audit_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin() && isValidId(logId) && isValidAdminAuditLog(incoming());
+      allow update, delete: if false; // Immutable audit log
+    }
+  }
+}

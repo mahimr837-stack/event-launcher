@@ -14,9 +14,14 @@ import {
   Loader2,
 } from "lucide-react";
 import { type Channel, type DemoAction, type DemoState } from "@/lib/event-demo";
-import { cn } from "@/lib/utils";
-import { getDispatchedThreads, saveDispatchedThread, type DispatchedLiveThread } from "@/lib/dispatched-threads";
+import {
+  getDispatchedThreads,
+  saveDispatchedThread,
+  syncThreadsFromFirestore,
+  type DispatchedLiveThread,
+} from "@/lib/dispatched-threads";
 import { getCachedToken, signInWithGoogle, searchAndFetchGmailThread, cleanEmailBody } from "@/lib/gmail-client";
+import { cn } from "@/lib/utils";
 
 interface Props {
   state: DemoState;
@@ -356,6 +361,16 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
       setSelectedThreadId(list[0].id);
     }
 
+    // Hydrate from Firestore cloud
+    syncThreadsFromFirestore().then((cloudThreads) => {
+      if (cloudThreads && cloudThreads.length > 0) {
+        setLiveDispatches(cloudThreads);
+        if (list.length === 0) {
+          setSelectedThreadId(cloudThreads[0].id);
+        }
+      }
+    });
+
     const handler = () => {
       const updated = getDispatchedThreads();
       setLiveDispatches(updated);
@@ -396,8 +411,11 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
   const filteredThreads = combinedThreads.filter(
     (t) => channelFilter === "All" || t.channel === channelFilter
   );
-  const activeThread = combinedThreads.find((t) => t.id === selectedThreadId) || combinedThreads[0] || AGENT_THREADS[0];
-  const AgentIcon = activeThread.agentIcon;
+  const activeThread =
+    combinedThreads.find((t) => t.id === selectedThreadId) ||
+    combinedThreads[0] ||
+    AGENT_THREADS[0];
+  const AgentIcon = activeThread?.agentIcon || UsersRound;
 
   const handleRefreshReplies = async (thread: AgentConversationThread) => {
     setIsRefreshing(true);
@@ -551,9 +569,14 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
             </p>
             <div className="space-y-2">
               {filteredThreads.map((thread) => {
-                const isSelected = thread.id === activeThread.id;
-                const Icon = thread.agentIcon;
-                const lastMessage = thread.messages[thread.messages.length - 1];
+                const isSelected = thread.id === activeThread?.id;
+                const Icon = thread.agentIcon || UsersRound;
+                const msgs = thread.messages || [];
+                const lastMessage = msgs[msgs.length - 1] || {
+                  senderName: thread.agentName || "Agent",
+                  body: thread.topic || "Conversation initialized",
+                  time: "Just now",
+                };
 
                 return (
                   <button
@@ -595,7 +618,7 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
 
                     <div className="mt-2 flex w-full items-center justify-between border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
                       <span className="truncate">
-                        {lastMessage.senderName}: {lastMessage.body.split("\n")[0]}
+                        {lastMessage.senderName}: {(lastMessage.body || "").split("\n")[0]}
                       </span>
                       <span className="shrink-0">{lastMessage.time}</span>
                     </div>
@@ -671,9 +694,9 @@ export function ActivityView({ _state }: { _state?: DemoState; [key: string]: un
 
               {/* Back-and-forth Conversation Stream */}
               <div className="space-y-4 p-4 sm:p-6 bg-[#FAFAF8]">
-                {activeThread.messages.map((message, index) => {
+                {(activeThread?.messages || []).map((message, index) => {
                   const isAgent = message.sender === "agent";
-                  const isLast = index === activeThread.messages.length - 1;
+                  const isLast = index === (activeThread?.messages?.length ?? 1) - 1;
 
                   return (
                     <div key={message.id} className="relative pl-7 sm:pl-8">

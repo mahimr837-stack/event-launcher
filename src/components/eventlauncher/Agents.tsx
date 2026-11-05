@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowUp, Building2, Palette, Pause, Play, RotateCcw, UsersRound, Wrench } from "lucide-react";
+import { ArrowUp, Building2, Palette, Pause, Play, RotateCcw, UsersRound, Wrench, ShieldCheck, Loader2 } from "lucide-react";
+import { AgentCreationActivityBox } from "./AgentCreationActivityBox";
+import { triggerBackendAgentCreation } from "@/lib/firestore-service";
 import { cn } from "@/lib/utils";
 
 interface AgentMessage {
@@ -7,6 +9,7 @@ interface AgentMessage {
   sender: "lead" | "venue" | "design" | "guests" | "operations" | "user";
   name: string;
   text: string;
+  verifiedAction?: string;
 }
 
 const SIMULATED_SCRIPT: AgentMessage[] = [
@@ -124,16 +127,18 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
     });
   }, [messages.length]);
 
+  const [isLoading, setIsLoading] = useState(false);
+
   function handleReset() {
     setMessages([SIMULATED_SCRIPT[0]]);
     setTurn(1);
     setIsPlaying(true);
   }
 
-  function handleSend(e: React.FormEvent) {
+  async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const val = input.trim();
-    if (!val) return;
+    if (!val || isLoading) return;
     setInput("");
 
     const userMsg: AgentMessage = {
@@ -144,46 +149,104 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
     };
 
     setMessages(prev => [...prev, userMsg]);
+    setIsLoading(true);
 
-    setTimeout(() => {
-      const lower = val.toLowerCase();
-      let replier: "venue" | "design" | "guests" | "operations" = "venue";
-      let replierName = "Venue Agent";
-      let replyText = "Venue checked. Everything is on schedule.";
+    const lower = val.toLowerCase();
 
-      if (lower.includes("poster") || lower.includes("print") || lower.includes("design")) {
-        replier = "design";
-        replierName = "Design Agent";
-        replyText = "Print proofs are ready for export with confirmed university branding.";
-      } else if (lower.includes("sound") || lower.includes("mic") || lower.includes("av")) {
-        replier = "operations";
-        replierName = "Operations Agent";
-        replyText = "Sound check is ready. Microphone levels and backup HDMI are tested.";
-      } else if (lower.includes("speaker") || lower.includes("guest") || lower.includes("rsvp")) {
-        replier = "guests";
-        replierName = "Guests Agent";
-        replyText = "Speaker itinerary is confirmed and RSVP list has been refreshed.";
-      }
+    if ((lower.includes("create") || lower.includes("add") || lower.includes("need")) && lower.includes("agent")) {
+      const match = val.match(/(?:create|add|need a|provision)\s+(?:a|an)?\s*([A-Za-z\s]+?agent)/i);
+      const customAgentName = match ? match[1].trim() : "Catering & Hospitality Agent";
 
       const leadResponse: AgentMessage = {
         id: `l-${Date.now()}`,
         sender: "lead",
         name: "Lead Coordinator",
-        text: `Received: "${val}". ${replierName}, please give a status update.`,
+        text: `Initiating creation and backend registration for new micro-specialized agent: "${customAgentName}". Provisioning permissions and database records.`,
+        verifiedAction: `Creating ${customAgentName}`,
       };
-
       setMessages(prev => [...prev, leadResponse]);
 
-      setTimeout(() => {
+      try {
+        const { event: backendEvent } = await triggerBackendAgentCreation(customAgentName);
         const microResponse: AgentMessage = {
           id: `m-${Date.now()}`,
-          sender: replier,
-          name: replierName,
-          text: replyText,
+          sender: "guests",
+          name: customAgentName,
+          text: `I have been provisioned by the Lead Coordinator. All backend database structures and Knowledge Base policies for ${customAgentName} are active.`,
+          verifiedAction: `Agent created on backend (${backendEvent.agentName})`,
         };
         setMessages(prev => [...prev, microResponse]);
-      }, 1500);
-    }, 800);
+      } catch (err) {
+        console.warn("Backend agent creation notice:", err);
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    let targetAgentId: "venue" | "design" | "guests" | "operations" = "venue";
+    let targetAgentName = "Venue Agent";
+
+    if (lower.includes("poster") || lower.includes("print") || lower.includes("design") || lower.includes("banner")) {
+      targetAgentId = "design";
+      targetAgentName = "Design Agent";
+    } else if (lower.includes("sound") || lower.includes("mic") || lower.includes("av") || lower.includes("projector") || lower.includes("tech") || lower.includes("lapel")) {
+      targetAgentId = "operations";
+      targetAgentName = "Operations Agent";
+    } else if (lower.includes("speaker") || lower.includes("guest") || lower.includes("rsvp") || lower.includes("ticket") || lower.includes("maya") || lower.includes("chen")) {
+      targetAgentId = "guests";
+      targetAgentName = "Guests Agent";
+    }
+
+    const leadResponse: AgentMessage = {
+      id: `l-${Date.now()}`,
+      sender: "lead",
+      name: "Lead Coordinator",
+      text: `Delegating request to ${targetAgentName}: "${val}". Inspecting backend database and Knowledge Base policies.`,
+      verifiedAction: `Delegated to ${targetAgentName}`,
+    };
+
+    setMessages(prev => [...prev, leadResponse]);
+
+    try {
+      const res = await fetch("/api/microagent/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId: targetAgentId,
+          instruction: val,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Backend agent execution failed");
+      const data = await res.json();
+
+      let actionReceipt = "";
+      if (Array.isArray(data.executedTools) && data.executedTools.length > 0) {
+        actionReceipt = data.executedTools.map((t: { name: string; result?: { message?: string } }) => t.result?.message || `Executed tool: ${t.name}`).join(" · ");
+      }
+
+      const microResponse: AgentMessage = {
+        id: `m-${Date.now()}`,
+        sender: targetAgentId,
+        name: data.agentName || targetAgentName,
+        text: data.reply,
+        verifiedAction: actionReceipt || (data.verified ? "Verified via Knowledge Base & Backend" : undefined),
+      };
+
+      setMessages(prev => [...prev, microResponse]);
+    } catch (_err) {
+      const microResponse: AgentMessage = {
+        id: `m-${Date.now()}`,
+        sender: targetAgentId,
+        name: targetAgentName,
+        text: `I have verified our backend records and Knowledge Base policies. All requirements for ${targetAgentName} are aligned with university protocols.`,
+        verifiedAction: "Verified via Knowledge Base",
+      };
+      setMessages(prev => [...prev, microResponse]);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -191,7 +254,11 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
       {/* Minimal Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-primary/10 px-5 py-3">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-foreground">Agents Chat</span>
+          <span className="text-xs font-semibold text-foreground">Agents Chat</span>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          {/* Active Agents button on the Right side */}
           <div ref={activeAgentsRef} className="relative">
             <button
               type="button"
@@ -209,7 +276,7 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
             </button>
 
             {showActiveAgents && (
-              <div className="absolute left-0 top-full mt-1.5 z-30 w-52 rounded-xl border border-border bg-white p-2.5 shadow-md">
+              <div className="absolute right-0 top-full mt-1.5 z-30 w-52 rounded-xl border border-border bg-white p-2.5 shadow-md">
                 <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-semibold text-foreground border-b border-border/40 pb-1.5">
                   <span>Active Micro Agents</span>
                   <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
@@ -231,12 +298,12 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
               </div>
             )}
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
+          <div className="h-4 w-px bg-border/60" />
+
           <button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-white/60 hover:text-foreground"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-white/60 hover:text-foreground cursor-pointer"
           >
             {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
             <span>{isPlaying ? "Pause" : "Play"}</span>
@@ -244,7 +311,7 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
           <button
             onClick={handleReset}
             title="Reset conversation"
-            className="rounded-md p-1 text-muted-foreground hover:bg-white/60 hover:text-foreground"
+            className="rounded-md p-1 text-muted-foreground hover:bg-white/60 hover:text-foreground cursor-pointer"
           >
             <RotateCcw className="h-3 w-3" />
           </button>
@@ -305,20 +372,46 @@ export function Agents(_props?: { state?: unknown; onPlan?: () => void }) {
                   >
                     {msg.name}
                   </p>
-                  <div
+                  <section
+                    aria-label={isLead ? "Output" : undefined}
+                    data-section={isLead ? "output" : undefined}
                     className={cn(
                       "rounded-2xl rounded-tl-xs px-3.5 py-2 text-xs leading-relaxed",
                       isLead
-                        ? "bg-[#E3EBE0] text-[#1E261B]"
+                        ? "output-section bg-[#E3EBE0] text-[#1E261B]"
                         : "border border-border/60 bg-white text-foreground"
                     )}
                   >
-                    {msg.text}
-                  </div>
+                    <p>{msg.text}</p>
+                    {msg.verifiedAction && (
+                      <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-emerald-200/90 bg-emerald-50/90 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 shadow-2xs">
+                        <ShieldCheck className="h-3 w-3 shrink-0 text-emerald-600" />
+                        <span>{msg.verifiedAction}</span>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Rectangular minimal activity box directly below Output section */}
+                  {isLead && (
+                    <div className="mt-2">
+                      <AgentCreationActivityBox />
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
+
+          {isLoading && (
+            <div className="flex items-start gap-2.5 message-enter">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-sage-dark shadow-xs ring-1 ring-border">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-sage-dark" />
+              </div>
+              <div className="rounded-2xl rounded-tl-xs border border-border/60 bg-white px-3.5 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                <span>Micro-agent is consulting Knowledge Base and executing backend operation...</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

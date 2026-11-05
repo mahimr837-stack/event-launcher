@@ -25,6 +25,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { initAuth, signInWithGoogle, signOutGoogle, sendGmailMessage, getCachedToken } from "@/lib/gmail-client";
 import { fetchTelegramStatus, type TelegramStatusResponse } from "@/lib/telegram-client";
 import { saveDispatchedThread, type DispatchedLiveThread } from "@/lib/dispatched-threads";
+import {
+  saveStakeholderInquiry,
+  subscribeStakeholderInquiries,
+  deleteStakeholderInquiry,
+} from "@/lib/firestore-service";
 import type { User as FirebaseUser } from "firebase/auth";
 
 interface Props {
@@ -198,6 +203,29 @@ export function IntegrationView({ state, onNavigate }: Props) {
     return () => unsubscribe();
   }, []);
 
+  // Listen to Firestore stakeholder inquiries
+  useEffect(() => {
+    const unsubscribe = subscribeStakeholderInquiries((cloudInquiries) => {
+      if (cloudInquiries && cloudInquiries.length > 0) {
+        setInfoCards(cloudInquiries);
+        setDrafts((prev) => {
+          const next = { ...prev };
+          cloudInquiries.forEach((item) => {
+            if (item.draftSubject || item.draftBody) {
+              next[item.id] = {
+                subject: item.draftSubject || next[item.id]?.subject || "",
+                body: item.draftBody || next[item.id]?.body || "",
+                status: next[item.id]?.status || "draft",
+              };
+            }
+          });
+          return next;
+        });
+      }
+    }, infoCards);
+    return () => unsubscribe();
+  }, []);
+
   // Fetch Telegram bot status
   useEffect(() => {
     async function loadTelegram() {
@@ -244,17 +272,28 @@ export function IntegrationView({ state, onNavigate }: Props) {
 
     // Ensure draft is prepared for this card
     const card = infoCards.find((c) => c.id === id);
-    if (card && !drafts[id]) {
-      setDrafts((prev) => ({
-        ...prev,
-        [id]: {
-          subject: DEFAULT_DRAFTS[id]?.subject || `Regarding: ${card.topic || card.question}`,
-          body:
-            DEFAULT_DRAFTS[id]?.body ||
-            `Dear ${card.recipientName || "Colleague"},\n\nI am contacting you regarding ${card.topic || card.question} for the upcoming event.\n\nPlease confirm availability and details at your earliest convenience.\n\nBest regards,\nEventLauncher Coordination Agent`,
-          status: "draft",
-        },
-      }));
+    if (card) {
+      const currentDraft = drafts[id] || {
+        subject: DEFAULT_DRAFTS[id]?.subject || `Regarding: ${card.topic || card.question}`,
+        body:
+          DEFAULT_DRAFTS[id]?.body ||
+          `Dear ${card.recipientName || "Colleague"},\n\nI am contacting you regarding ${card.topic || card.question} for the upcoming event.\n\nPlease confirm availability and details at your earliest convenience.\n\nBest regards,\nEventLauncher Coordination Agent`,
+        status: "draft",
+      };
+
+      if (!drafts[id]) {
+        setDrafts((prev) => ({
+          ...prev,
+          [id]: currentDraft,
+        }));
+      }
+
+      // Persist to Firestore cloud database
+      saveStakeholderInquiry({
+        ...card,
+        draftSubject: currentDraft.subject,
+        draftBody: currentDraft.body,
+      }).catch((e) => console.warn("Firestore inquiry save notice:", e));
     }
   };
 
@@ -272,18 +311,26 @@ export function IntegrationView({ state, onNavigate }: Props) {
       status: "pending",
     };
     setInfoCards((prev) => [...prev, newCard]);
+    const initDraft: EmailDraft = {
+      subject: "Regarding: Event coordination specifications and confirmation",
+      body: "Hello,\n\nI am reaching out regarding event coordination specifications for the upcoming event.\n\nPlease confirm your availability and requirements.\n\nBest regards,\nEventLauncher Coordination Agent",
+      status: "draft",
+    };
     setDrafts((prev) => ({
       ...prev,
-      [newId]: {
-        subject: "Regarding: Event coordination specifications and confirmation",
-        body: "Hello,\n\nI am reaching out regarding event coordination specifications for the upcoming event.\n\nPlease confirm your availability and requirements.\n\nBest regards,\nEventLauncher Coordination Agent",
-        status: "draft",
-      },
+      [newId]: initDraft,
     }));
+    // Save to Firestore
+    saveStakeholderInquiry({
+      ...newCard,
+      draftSubject: initDraft.subject,
+      draftBody: initDraft.body,
+    }).catch((e) => console.warn("Firestore new card save notice:", e));
   };
 
   const handleDeleteCard = (id: string) => {
     setInfoCards((prev) => prev.filter((item) => item.id !== id));
+    deleteStakeholderInquiry(id).catch((e) => console.warn("Firestore delete inquiry notice:", e));
   };
 
   const updateDraft = (cardId: string, updates: Partial<EmailDraft>) => {
@@ -414,7 +461,7 @@ export function IntegrationView({ state, onNavigate }: Props) {
           type="button"
           onClick={() => setActiveTab("connect")}
           className={cn(
-            "w-[26%] sm:w-[24%] flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+            "flex-1 flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
             activeTab === "connect"
               ? "bg-sage-light text-sage-dark ring-1 ring-primary/25 shadow-xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
@@ -836,12 +883,18 @@ export function IntegrationView({ state, onNavigate }: Props) {
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-0.5 text-[10px] font-medium border",
-                      currentUser
+                      currentUser && getCachedToken()
                         ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : currentUser
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
                         : "bg-muted text-muted-foreground border-transparent"
                     )}
                   >
-                    {currentUser ? "Connected" : "Not connected"}
+                    {currentUser && getCachedToken()
+                      ? "Connected & Active"
+                      : currentUser
+                      ? "Session Needs Renewal"
+                      : "Not connected"}
                   </span>
                 </div>
 
@@ -895,18 +948,30 @@ export function IntegrationView({ state, onNavigate }: Props) {
 
               <div className="pt-3 border-t border-border/40">
                 {currentUser ? (
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      Email connected
+                      {getCachedToken() ? "Email connected" : "Session active"}
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleSignOutGoogle}
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors cursor-pointer"
-                    >
-                      Disconnect
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {!getCachedToken() && (
+                        <button
+                          type="button"
+                          onClick={handleSignInGoogle}
+                          disabled={isAuthLoading}
+                          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+                        >
+                          Renew Token
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleSignOutGoogle}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors cursor-pointer"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button

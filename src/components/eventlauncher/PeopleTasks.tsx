@@ -2,6 +2,7 @@ import { useState, type Dispatch } from "react";
 import { ArrowUpRight, Check, Clock3, ClipboardList, Pencil, UserRound, UsersRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type DemoAction, type DemoState, type Task, type TaskStatus, formatDate, taskStatus } from "@/lib/event-demo";
+import { saveTask } from "@/lib/firestore-service";
 import { cn } from "@/lib/utils";
 import { ActionButton, fieldClass, labelClass, SectionHeading, StatusBadge } from "./Primitives";
 
@@ -164,7 +165,7 @@ export function PeopleTasks({ state, dispatch, onWorkspace }: { state: DemoState
       </div>
     {!poster && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed bg-white/50 p-5"><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-sage-dark"/><div><p className="text-xs font-medium">The poster needs an owner.</p><p className="mt-1 text-[11px] text-muted-foreground">The coordinator collects their details after plan approval.</p></div></div><ActionButton variant="outline" onClick={onWorkspace}>Continue in Workspace<ArrowUpRight/></ActionButton></div>}
     {poster && <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-clay-light p-4"><div className="flex items-start gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 text-clay"/><div><p className="text-xs font-medium text-clay">Try a missed deadline</p><p className="mt-1 text-[11px] text-muted-foreground">Advance the demo clock beyond the poster deadline to see the coordinator’s response.</p></div></div><ActionButton variant="outline" disabled={!canAdvance} onClick={() => dispatch({ type: "ADVANCE_CLOCK" })}>{poster.status === "Completed" ? "Poster already completed" : canAdvance ? "Simulate overdue poster" : "Demo clock advanced"}</ActionButton></div>}
-      <Dialog open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}><DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl bg-background"><DialogHeader><DialogTitle>Update responsibility</DialogTitle><DialogDescription className="text-xs leading-relaxed">{editing?.title}. Physical completion must be explicitly reported; it is never inferred.</DialogDescription></DialogHeader>{editing && <TaskForm key={editing.id} task={editing} state={state} onSave={task => { dispatch({ type: "UPDATE_TASK", task }); setEditing(null); }}/>}</DialogContent></Dialog>
+      <Dialog open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}><DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl bg-background"><DialogHeader><DialogTitle>Update responsibility</DialogTitle><DialogDescription className="text-xs leading-relaxed">{editing?.title}. Physical completion must be explicitly reported; it is never inferred.</DialogDescription></DialogHeader>{editing && <TaskForm key={editing.id} task={editing} state={state} onSave={task => { dispatch({ type: "UPDATE_TASK", task }); saveTask(task).catch(e => console.warn("Firestore task update notice:", e)); setEditing(null); }}/>}</DialogContent></Dialog>
     </div>
   );
 }

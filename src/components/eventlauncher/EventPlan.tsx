@@ -3,6 +3,7 @@ import { CalendarDays, Check, ChevronRight, Clock, MapPin, Pencil, ShieldAlert, 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { type DemoAction, type DemoState, type EventDetails, formatDate, offsetDate } from "@/lib/event-demo";
+import { saveActiveEvent } from "@/lib/firestore-service";
 import { ActionButton, fieldClass, labelClass } from "./Primitives";
 import { cn } from "@/lib/utils";
 
@@ -435,7 +436,7 @@ export function EditEventDialog({
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">Edit Event Details</DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Update event parameters. Revisions update dependent milestones automatically.
+            Update active event parameters. Changes are automatically saved to your cloud workspace.
           </DialogDescription>
         </DialogHeader>
         {open && (
@@ -445,6 +446,15 @@ export function EditEventDialog({
             now={state.now}
             onSave={event => {
               dispatch({ type: "EDIT_EVENT", event });
+              saveActiveEvent({
+                date: event.date,
+                time: event.time,
+                venue: event.venue,
+                venueConfirmed: event.venueConfirmed,
+                permission: event.permission,
+                speaker: event.speaker,
+                audience: event.audience,
+              }).catch(e => console.warn("Firestore event save notice:", e));
               onOpenChange(false);
             }}
           />
